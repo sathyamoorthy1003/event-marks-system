@@ -109,11 +109,7 @@ const GLOBAL_ROOT_ID =
 
 // Helper to generate consistent collection paths avoiding permission errors
 // Strategy: Flattened Multi-Tenancy
-// Instead of /artifacts/{tenantId}/... (which fails permissions),
-// We use /artifacts/{GLOBAL_ROOT_ID}/public/data/{tenantId}_{collectionName}
 const getCollectionRef = (tenantId, collectionName) => {
-  // If tenantId is provided, prefix it. If null/undefined, use it as is (e.g. for master list if desired, though master usually has a specific ID)
-  // We default to DEFAULT_APP_ID if tenantId is missing to prevent errors, unless explicitly null (for system-wide)
   const safeTenant = tenantId || DEFAULT_APP_ID;
   const finalName = `${safeTenant}_${collectionName}`;
   return collection(
@@ -1794,20 +1790,25 @@ const ParticipantsView = ({
       return addToast("Fill all fields.", "error");
     if (teams.some((t) => t.code === newTeamCode))
       return addToast("ID exists.", "error");
-    await addDoc(getCollectionRef(currentAppId, "teams"), {
-      name: newTeamName,
-      code: newTeamCode,
-      createdAt: serverTimestamp(),
-    });
-    await addDoc(getCollectionRef(currentAppId, "audit_logs"), {
-      action: "add_participant",
-      details: { name: newTeamName, code: newTeamCode },
-      timestamp: serverTimestamp(),
-    });
-    setNewTeamName("");
-    setNewTeamCode("");
-    setIsModalOpen(false);
-    addToast("Participant Added", "success");
+    try {
+      await addDoc(getCollectionRef(currentAppId, "teams"), {
+        name: newTeamName,
+        code: newTeamCode,
+        createdAt: serverTimestamp(),
+      });
+      await addDoc(getCollectionRef(currentAppId, "audit_logs"), {
+        action: "add_participant",
+        details: { name: newTeamName, code: newTeamCode },
+        timestamp: serverTimestamp(),
+      });
+      setNewTeamName("");
+      setNewTeamCode("");
+      setIsModalOpen(false);
+      addToast("Participant Added", "success");
+    } catch (err) {
+      console.error(err);
+      addToast("Error adding participant: " + err.message, "error");
+    }
   };
 
   const handleFileUpload = (e) => {
@@ -2046,19 +2047,24 @@ const InvigilatorsView = ({
 
   const addJudge = async () => {
     if (!form.id) return addToast("Judge ID is required", "error");
-    await addDoc(getCollectionRef(currentAppId, "invigilators"), {
-      judgeId: form.id.toUpperCase(),
-      name: form.name || "",
-      status: "active",
-    });
-    await addDoc(getCollectionRef(currentAppId, "audit_logs"), {
-      action: "add_judge",
-      details: { id: form.id, name: form.name },
-      timestamp: serverTimestamp(),
-    });
-    setForm({ id: "", name: "" });
-    setIsModalOpen(false);
-    addToast("Judge Added", "success");
+    try {
+      await addDoc(getCollectionRef(currentAppId, "invigilators"), {
+        judgeId: form.id.toUpperCase(),
+        name: form.name || "",
+        status: "active",
+      });
+      await addDoc(getCollectionRef(currentAppId, "audit_logs"), {
+        action: "add_judge",
+        details: { id: form.id, name: form.name },
+        timestamp: serverTimestamp(),
+      });
+      setForm({ id: "", name: "" });
+      setIsModalOpen(false);
+      addToast("Judge Added", "success");
+    } catch (err) {
+      console.error(err);
+      addToast("Error adding judge: " + err.message, "error");
+    }
   };
 
   const toggleStatus = async (judge) => {
