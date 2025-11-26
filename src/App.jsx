@@ -68,7 +68,6 @@ import {
   LogIn,
   UserPlus,
   ListOrdered,
-  ExternalLink,
 } from "lucide-react";
 
 // ==========================================
@@ -400,8 +399,9 @@ const SampleDataPreview = ({ type, onClose }) => {
 };
 
 // ==========================================
-// --- SUPER ADMIN VIEW ---
+// --- SUB-VIEWS DEFINITION (ORDER MATTERS) ---
 // ==========================================
+
 const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
   const [clients, setClients] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -416,6 +416,9 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
       getCollectionRef(MASTER_SYSTEM_ID, "system_users"),
       (snap) => {
         setClients(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (error) => {
+        console.error("Error fetching clients:", error);
       }
     );
     return () => unsub();
@@ -426,9 +429,7 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
       alert("All fields are required");
       return;
     }
-
     const uniqueAppId = "event-" + Math.random().toString(36).substr(2, 9);
-
     try {
       await addDoc(getCollectionRef(MASTER_SYSTEM_ID, "system_users"), {
         ...newClient,
@@ -473,7 +474,6 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
           </Button>
         </div>
       </div>
-
       <div className="flex-1 p-8 max-w-7xl mx-auto w-full">
         <div className="flex justify-between items-center mb-8">
           <div>
@@ -492,7 +492,6 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
             Add New Client
           </Button>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {clients.map((client) => (
             <Card
@@ -514,7 +513,6 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
                   <Trash2 size={18} />
                 </button>
               </div>
-
               <h3 className="font-bold text-lg text-slate-900 mb-1">
                 {client.organizationName}
               </h3>
@@ -529,7 +527,6 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
                   DB ID: {client.uniqueAppId}
                 </div>
               </div>
-
               <Button
                 onClick={() => onAccessDatabase(client)}
                 className="w-full"
@@ -540,7 +537,6 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
               </Button>
             </Card>
           ))}
-
           {clients.length === 0 && (
             <div className="col-span-full p-12 text-center border-2 border-dashed border-slate-300 rounded-xl text-slate-400">
               <Database size={48} className="mx-auto mb-4 opacity-20" />
@@ -549,7 +545,6 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
           )}
         </div>
       </div>
-
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -593,9 +588,6 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
   );
 };
 
-// ==========================================
-// --- src/pages/LoginView.jsx ---
-// ==========================================
 const LoginView = ({ onLogin, addToast }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -604,8 +596,6 @@ const LoginView = ({ onLogin, addToast }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-
-    // 1. Check if Super Admin
     if (
       email.toLowerCase() === "sathyamoorthyc1003@gmail.com" &&
       password === "Prakash@1"
@@ -614,8 +604,6 @@ const LoginView = ({ onLogin, addToast }) => {
       setLoading(false);
       return;
     }
-
-    // 2. Check if it's a Client User
     try {
       const usersRef = getCollectionRef(MASTER_SYSTEM_ID, "system_users");
       const q = query(
@@ -624,7 +612,6 @@ const LoginView = ({ onLogin, addToast }) => {
         where("password", "==", password)
       );
       const querySnapshot = await getDocs(q);
-
       if (!querySnapshot.empty) {
         const userData = querySnapshot.docs[0].data();
         onLogin({
@@ -633,7 +620,6 @@ const LoginView = ({ onLogin, addToast }) => {
           dbId: userData.uniqueAppId,
         });
       } else {
-        // Demo fallback
         if (email === "admin@event.com" && password === "admin123") {
           onLogin({ role: "client", name: "Demo Admin", dbId: DEFAULT_APP_ID });
         } else {
@@ -689,84 +675,6 @@ const LoginView = ({ onLogin, addToast }) => {
   );
 };
 
-// ==========================================
-// --- src/components/Sidebar.jsx ---
-// ==========================================
-const Sidebar = ({ view, setView, onLogout, userRole, activeAppId }) => {
-  const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "ranking", label: "Ranking Logic", icon: Calculator },
-    { id: "participants", label: "Participants", icon: Users },
-    { id: "qr", label: "QR Codes", icon: QrCode },
-    { id: "invigilators", label: "Invigilators", icon: UserCheck },
-    { id: "submissions", label: "Submissions", icon: FileSpreadsheet },
-    { id: "audit", label: "Audit Logs", icon: FileJson },
-    { id: "export", label: "Export Data", icon: Download },
-    { id: "rubric", label: "Rubric Config", icon: Settings },
-  ];
-
-  return (
-    <aside className="w-64 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col h-full">
-      <div className="p-6 border-b border-slate-100">
-        <div className="flex items-center gap-3">
-          <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center text-white ${
-              userRole === "super_admin" ? "bg-purple-600" : "bg-blue-600"
-            }`}
-          >
-            <Award size={22} />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-slate-900 leading-tight">
-              EventMarks
-            </h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              {userRole === "super_admin" ? "Impersonating" : "Client Portal"}
-            </p>
-          </div>
-        </div>
-      </div>
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {menuItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setView(item.id)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-              view === item.id
-                ? "bg-blue-50 text-blue-700 shadow-sm"
-                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-            }`}
-          >
-            <item.icon
-              size={18}
-              className={view === item.id ? "text-blue-600" : "text-slate-400"}
-            />
-            {item.label}
-            {view === item.id && (
-              <ChevronRight size={14} className="ml-auto opacity-50" />
-            )}
-          </button>
-        ))}
-      </nav>
-      <div className="p-4 border-t border-slate-100">
-        <div className="mb-3 px-2 text-xs font-mono text-slate-400 break-all">
-          DB: {activeAppId}
-        </div>
-        <button
-          onClick={onLogout}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors text-sm font-medium"
-        >
-          <LogOut size={18} />
-          {userRole === "super_admin" ? "Exit to Admin" : "Sign Out"}
-        </button>
-      </div>
-    </aside>
-  );
-};
-
-// ==========================================
-// --- src/pages/Dashboard.jsx ---
-// ==========================================
 const DashboardView = ({
   teams,
   invigilators,
@@ -928,9 +836,6 @@ const DashboardView = ({
   );
 };
 
-// ==========================================
-// --- src/pages/RankingLogic.jsx ---
-// ==========================================
 const RankingLogicView = ({
   rankingConfig,
   setRankingConfig,
@@ -1197,9 +1102,6 @@ const RankingLogicView = ({
   );
 };
 
-// ==========================================
-// --- src/pages/QRCodes.jsx ---
-// ==========================================
 const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1230,10 +1132,8 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
     if (selectedIds.size === teams.length) setSelectedIds(new Set());
     else setSelectedIds(new Set(teams.map((t) => t.id)));
   };
-  // FIX: Use 'team.code' (the visible participant ID) instead of 'team.id' (internal Firestore ID) for the QR URL
   const getQrUrl = (teamCode) => {
     const baseUrl = window.location.origin + window.location.pathname;
-    // Using team.code as requested by user for "Participant ID"
     return `${baseUrl}?team=${teamCode}&tenant=${currentAppId}`;
   };
   const downloadSingle = async (team) => {
@@ -1499,9 +1399,6 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
   );
 };
 
-// ==========================================
-// --- src/pages/JudgeApp.jsx ---
-// ==========================================
 const JudgeApp = ({
   teamId,
   teams,
@@ -1605,7 +1502,6 @@ const JudgeApp = ({
     setIsSubmitting(false);
   };
 
-  // FIX: Wait for data load before showing invalid
   if (!isDataLoaded && teams.length === 0) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-500 gap-4">
@@ -1790,9 +1686,6 @@ const JudgeApp = ({
   );
 };
 
-// ==========================================
-// --- src/pages/Participants.jsx ---
-// ==========================================
 const ParticipantsView = ({
   teams,
   submissions,
@@ -2061,9 +1954,6 @@ const ParticipantsView = ({
   );
 };
 
-// ==========================================
-// --- src/pages/Invigilators.jsx ---
-// ==========================================
 const InvigilatorsView = ({
   invigilators,
   submissions,
@@ -2378,326 +2268,77 @@ const InvigilatorsView = ({
 };
 
 // ==========================================
-// --- src/pages/Settings.jsx ---
+// --- src/components/Sidebar.jsx ---
 // ==========================================
-const SettingsView = ({ rubric, setRubric, addToast, currentAppId }) => {
-  const [localRubric, setLocalRubric] = useState(rubric || []);
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    if (rubric.length > 0 && localRubric.length === 0) setLocalRubric(rubric);
-  }, [rubric]);
-
-  const handleFieldChange = (index, field, value) => {
-    const updated = [...localRubric];
-    updated[index][field] = value;
-    setLocalRubric(updated);
-  };
-  const addCriterion = () =>
-    setLocalRubric([
-      ...localRubric,
-      {
-        id: Date.now().toString(),
-        name: "",
-        min: 0,
-        max: 10,
-        weight: 1.0,
-        inputType: "number",
-      },
-    ]);
-  const removeCriterion = (index) => {
-    const updated = [...localRubric];
-    updated.splice(index, 1);
-    setLocalRubric(updated);
-  };
-
-  const saveRubric = async () => {
-    setIsSaving(true);
-    try {
-      const sanitizedRubric = localRubric.map((r) => ({
-        ...r,
-        min: r.min === "" ? 0 : Number(r.min),
-        max: r.max === "" ? 0 : Number(r.max),
-        weight: r.weight === "" ? 0 : Number(r.weight),
-        inputType: r.inputType || "number",
-      }));
-
-      await setDoc(getDocRef(currentAppId, "rubric_config", "main"), {
-        criteria: sanitizedRubric,
-        updatedAt: serverTimestamp(),
-      });
-      await addDoc(getCollectionRef(currentAppId, "audit_logs"), {
-        action: "rubric_update",
-        details: { criteriaCount: sanitizedRubric.length },
-        timestamp: serverTimestamp(),
-      });
-      addToast("Rubric Config Saved!", "success");
-    } catch (e) {
-      console.error(e);
-      addToast("Error saving.", "error");
-    }
-    setIsSaving(false);
-  };
+const Sidebar = ({ view, setView, onLogout, userRole, activeAppId }) => {
+  const menuItems = [
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "ranking", label: "Ranking Logic", icon: Calculator },
+    { id: "participants", label: "Participants", icon: Users },
+    { id: "qr", label: "QR Codes", icon: QrCode },
+    { id: "invigilators", label: "Invigilators", icon: UserCheck },
+    { id: "submissions", label: "Submissions", icon: FileSpreadsheet },
+    { id: "audit", label: "Audit Logs", icon: FileJson },
+    { id: "export", label: "Export Data", icon: Download },
+    { id: "rubric", label: "Rubric Config", icon: Settings },
+  ];
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-20">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">Scoring Rubric</h2>
-        <p className="text-slate-500">Configure evaluation criteria.</p>
-      </div>
-      <div className="space-y-4">
-        {localRubric.map((item, index) => (
-          <Card
-            key={item.id || index}
-            className="p-6 transition-all hover:shadow-md"
+    <aside className="w-64 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col h-full">
+      <div className="p-6 border-b border-slate-100">
+        <div className="flex items-center gap-3">
+          <div
+            className={`w-10 h-10 rounded-xl flex items-center justify-center text-white ${
+              userRole === "super_admin" ? "bg-purple-600" : "bg-blue-600"
+            }`}
           >
-            <div className="flex justify-between items-start mb-4">
-              <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wide">
-                Criterion {index + 1}
-              </h4>
-              <button
-                onClick={() => removeCriterion(index)}
-                className="text-slate-400 hover:text-red-500"
-              >
-                <Trash2 size={18} />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="col-span-2">
-                <Input
-                  label="Criterion Name"
-                  value={item.name}
-                  onChange={(e) =>
-                    handleFieldChange(index, "name", e.target.value)
-                  }
-                />
-              </div>
-              <div className="col-span-2 md:col-span-1">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">
-                  Input Type
-                </label>
-                <select
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  value={item.inputType || "number"}
-                  onChange={(e) =>
-                    handleFieldChange(index, "inputType", e.target.value)
-                  }
-                >
-                  <option value="number">Number Input (Slider)</option>
-                  <option value="stars">Star Rating</option>
-                </select>
-              </div>
-              <div className="col-span-2 md:col-span-1">
-                <Input
-                  label="Max Score"
-                  type="number"
-                  value={item.max}
-                  onChange={(e) =>
-                    handleFieldChange(
-                      index,
-                      "max",
-                      e.target.value === "" ? "" : parseFloat(e.target.value)
-                    )
-                  }
-                />
-              </div>
-              <div className="col-span-2 md:col-span-1">
-                <Input
-                  label="Weight (Multiplier)"
-                  type="number"
-                  step="0.1"
-                  value={item.weight}
-                  onChange={(e) =>
-                    handleFieldChange(
-                      index,
-                      "weight",
-                      e.target.value === "" ? "" : parseFloat(e.target.value)
-                    )
-                  }
-                />
-              </div>
-            </div>
-          </Card>
+            <Award size={22} />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-slate-900 leading-tight">
+              EventMarks
+            </h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              {userRole === "super_admin" ? "Impersonating" : "Client Portal"}
+            </p>
+          </div>
+        </div>
+      </div>
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        {menuItems.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => setView(item.id)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+              view === item.id
+                ? "bg-blue-50 text-blue-700 shadow-sm"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            }`}
+          >
+            <item.icon
+              size={18}
+              className={view === item.id ? "text-blue-600" : "text-slate-400"}
+            />
+            {item.label}
+            {view === item.id && (
+              <ChevronRight size={14} className="ml-auto opacity-50" />
+            )}
+          </button>
         ))}
+      </nav>
+      <div className="p-4 border-t border-slate-100">
+        <div className="mb-3 px-2 text-xs font-mono text-slate-400 break-all">
+          DB: {activeAppId}
+        </div>
+        <button
+          onClick={onLogout}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors text-sm font-medium"
+        >
+          <LogOut size={18} />
+          {userRole === "super_admin" ? "Exit to Admin" : "Sign Out"}
+        </button>
       </div>
-      <button
-        onClick={addCriterion}
-        className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-medium hover:border-blue-400 hover:text-blue-600"
-      >
-        <Plus size={20} /> Add Criterion
-      </button>
-      <div className="fixed bottom-0 left-64 right-0 p-4 bg-white border-t border-slate-200 flex justify-end gap-4 z-10">
-        <Button variant="secondary" onClick={() => setLocalRubric(rubric)}>
-          Reset
-        </Button>
-        <Button onClick={saveRubric} disabled={isSaving} icon={Save}>
-          {isSaving ? "Saving..." : "Save Rubric"}
-        </Button>
-      </div>
-    </div>
-  );
-};
-
-// ==========================================
-// --- src/pages/Export.jsx ---
-// ==========================================
-const ExportView = ({
-  submissions,
-  rubric,
-  teams,
-  invigilators,
-  leaderboard,
-}) => {
-  const downloadCSV = (content, filename) => {
-    const encodedUri = encodeURI(content);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-  const exportJudgeData = () => {
-    const headers = ["Judge ID", "Name", "Status"];
-    const rows = invigilators.map((i) => [
-      i.judgeId,
-      i.name,
-      i.status || "active",
-    ]);
-    downloadCSV(
-      "data:text/csv;charset=utf-8," +
-        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n"),
-      "judges_datasheet.csv"
-    );
-  };
-  const exportTeamData = () => {
-    const headers = ["Team ID", "Team Name"];
-    const rows = teams.map((t) => [t.code, t.name]);
-    downloadCSV(
-      "data:text/csv;charset=utf-8," +
-        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n"),
-      "teams_datasheet.csv"
-    );
-  };
-  const exportOverallData = () => {
-    const criteriaHeaders = rubric.map((r) => r.name);
-    const headers = [
-      "Submission ID",
-      "Team Code",
-      "Team Name",
-      "Invigilator ID",
-      ...criteriaHeaders,
-      "Total Score",
-      "Timestamp",
-    ];
-    const rows = submissions.map((sub) => [
-      sub.id,
-      sub.teamCode,
-      sub.teamName,
-      sub.invigilatorId,
-      ...rubric.map((r) => sub.scores[r.id] || 0),
-      sub.totalScore,
-      sub.timestamp?.toDate()?.toLocaleString(),
-    ]);
-    downloadCSV(
-      "data:text/csv;charset=utf-8," +
-        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n"),
-      "master_score_sheet.csv"
-    );
-  };
-
-  // New: Export Rank List
-  const exportRankList = () => {
-    const headers = [
-      "Rank",
-      "Team Code",
-      "Team Name",
-      "Evaluations Count",
-      "Raw Total Score",
-      "Final Weighted Score",
-    ];
-    const rows = leaderboard.map((team, index) => [
-      index + 1,
-      team.teamCode,
-      team.teamName,
-      team.count,
-      team.total?.toFixed(2),
-      team.finalScore?.toFixed(2),
-    ]);
-    downloadCSV(
-      "data:text/csv;charset=utf-8," +
-        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n"),
-      "rank_list.csv"
-    );
-  };
-
-  return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">Export Data</h2>
-        <p className="text-slate-500">
-          Download specific datasets or full reports.
-        </p>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="p-6 border-t-4 border-t-purple-500 hover:shadow-lg transition-shadow">
-          <div className="mb-4 p-3 bg-purple-100 text-purple-600 rounded-lg w-fit">
-            <UserCheck size={24} />
-          </div>
-          <h3 className="font-bold text-lg text-slate-800">Judge Data</h3>
-          <p className="text-xs text-slate-500 mt-1 mb-6">
-            List of all registered invigilators.
-          </p>
-          <Button
-            variant="secondary"
-            onClick={exportJudgeData}
-            className="w-full"
-          >
-            Download CSV
-          </Button>
-        </Card>
-        <Card className="p-6 border-t-4 border-t-blue-500 hover:shadow-lg transition-shadow">
-          <div className="mb-4 p-3 bg-blue-100 text-blue-600 rounded-lg w-fit">
-            <Users size={24} />
-          </div>
-          <h3 className="font-bold text-lg text-slate-800">Team Data</h3>
-          <p className="text-xs text-slate-500 mt-1 mb-6">
-            List of participating teams.
-          </p>
-          <Button
-            variant="secondary"
-            onClick={exportTeamData}
-            className="w-full"
-          >
-            Download CSV
-          </Button>
-        </Card>
-        <Card className="p-6 border-t-4 border-t-emerald-500 hover:shadow-lg transition-shadow">
-          <div className="mb-4 p-3 bg-emerald-100 text-emerald-600 rounded-lg w-fit">
-            <FileText size={24} />
-          </div>
-          <h3 className="font-bold text-lg text-slate-800">Score Sheet</h3>
-          <p className="text-xs text-slate-500 mt-1 mb-6">
-            Detailed score records.
-          </p>
-          <Button onClick={exportOverallData} className="w-full">
-            Download CSV
-          </Button>
-        </Card>
-        <Card className="p-6 border-t-4 border-t-orange-500 hover:shadow-lg transition-shadow">
-          <div className="mb-4 p-3 bg-orange-100 text-orange-600 rounded-lg w-fit">
-            <ListOrdered size={24} />
-          </div>
-          <h3 className="font-bold text-lg text-slate-800">Rank List</h3>
-          <p className="text-xs text-slate-500 mt-1 mb-6">
-            Leaderboard sorted by rank.
-          </p>
-          <Button onClick={exportRankList} className="w-full">
-            Download CSV
-          </Button>
-        </Card>
-      </div>
-    </div>
+    </aside>
   );
 };
 
