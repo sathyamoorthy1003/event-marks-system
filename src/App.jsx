@@ -25,7 +25,7 @@ try {
   if (typeof __firebase_config !== 'undefined') {
     firebaseConfig = JSON.parse(__firebase_config);
   } else {
-    // Fallback for local dev environment - Replace with your keys
+    // Fallback for local dev environment
     firebaseConfig = {
       apiKey: "AIzaSyBSnLkIdiPYdkzEvtYAfjJ-dJFfwXPyf7w",
       authDomain: "event-mark.firebaseapp.com",
@@ -76,13 +76,10 @@ const formatDate = (timestamp) => {
   return String(timestamp);
 };
 
-// Helper to robustly get URL parameters from Search or Hash
+// Helper to robustly get URL parameters
 const getUrlParam = (key) => {
-  // Check standard query string
   const searchParams = new URLSearchParams(window.location.search);
   if (searchParams.has(key)) return searchParams.get(key);
-  
-  // Check hash routing (e.g., /#/page?team=123)
   if (window.location.hash && window.location.hash.includes('?')) {
     const hashParts = window.location.hash.split('?');
     if (hashParts.length > 1) {
@@ -535,7 +532,6 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
 
   const toggleSelect = (id) => { const newSet = new Set(selectedIds); if (newSet.has(id)) newSet.delete(id); else newSet.add(id); setSelectedIds(newSet); };
   const toggleSelectAll = () => { if (selectedIds.size === teams.length) setSelectedIds(new Set()); else setSelectedIds(new Set(teams.map(t => t.id))); };
-  // FIX: Use 'team.code' (the visible participant ID) instead of 'team.id' (internal Firestore ID) for the QR URL
   const getQrUrl = (teamCode) => { 
     const baseUrl = window.location.origin + window.location.pathname; 
     // Using team.code as requested by user for "Participant ID"
@@ -601,6 +597,7 @@ const JudgeApp = ({ teamId, teams, rubric, invigilators, submissions, onExit, ad
 
   const verifyJudge = () => {
     const normalizedInput = judgeId.trim().toUpperCase();
+    // FIX: If invigilators haven't loaded yet, show error
     if (invigilators.length === 0 && !isDataLoaded) {
         addToast("System is loading judge data, please wait...", "error");
         return;
