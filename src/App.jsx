@@ -134,17 +134,18 @@ const getDocRef = (tenantId, collectionName, docId) => {
 
 // Helper for safe date formatting
 const formatDate = (timestamp) => {
-  if (!timestamp) return "...";
+  if (!timestamp) return "-";
   try {
     if (typeof timestamp.toDate === "function")
       return timestamp.toDate().toLocaleString();
     if (timestamp.seconds)
       return new Date(timestamp.seconds * 1000).toLocaleString();
+    if (timestamp instanceof Date) return timestamp.toLocaleString();
   } catch (e) {
     return "";
   }
-  // If it's an object but we don't know what it is, avoid crashing React
-  if (typeof timestamp === "object") return JSON.stringify(timestamp);
+  // Avoid returning objects that React can't render
+  if (typeof timestamp === "object") return "";
   return String(timestamp);
 };
 
