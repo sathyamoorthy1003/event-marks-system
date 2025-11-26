@@ -134,7 +134,7 @@ const getDocRef = (tenantId, collectionName, docId) => {
 
 // Helper for safe date formatting
 const formatDate = (timestamp) => {
-  if (!timestamp) return "-";
+  if (!timestamp) return "...";
   try {
     if (typeof timestamp.toDate === "function")
       return timestamp.toDate().toLocaleString();
@@ -144,7 +144,6 @@ const formatDate = (timestamp) => {
   } catch (e) {
     return "";
   }
-  // Avoid returning objects that React can't render
   if (typeof timestamp === "object") return "";
   return String(timestamp);
 };
@@ -1518,6 +1517,28 @@ const JudgeApp = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDone, setIsDone] = useState(false);
 
+  // Load session persistence for judge
+  useEffect(() => {
+    const savedJudge = localStorage.getItem(`judge_auth_${teamId}`);
+    if (savedJudge) {
+      setAuthenticatedJudge(JSON.parse(savedJudge));
+    }
+  }, [teamId]);
+
+  // Load unsaved scores if any
+  useEffect(() => {
+    const savedScores = localStorage.getItem(`judge_scores_${teamId}`);
+    if (savedScores) {
+      setScores(JSON.parse(savedScores));
+    }
+  }, [teamId]);
+
+  const updateScore = (criterionId, value) => {
+    const newScores = { ...scores, [criterionId]: value };
+    setScores(newScores);
+    localStorage.setItem(`judge_scores_${teamId}`, JSON.stringify(newScores));
+  };
+
   const alreadyScored = useMemo(() => {
     if (!authenticatedJudge) return false;
     return submissions.some(
@@ -1528,12 +1549,19 @@ const JudgeApp = ({
 
   const verifyJudge = () => {
     const normalizedInput = judgeId.trim().toUpperCase();
+    // FIX: If invigilators haven't loaded yet, show error
+    if (invigilators.length === 0 && !isDataLoaded) {
+      addToast("System is loading judge data, please wait...", "error");
+      return;
+    }
+
     const valid = invigilators.find((i) => i.judgeId === normalizedInput);
     if (valid) {
       if (valid.status === "inactive") {
         addToast("Access Denied: Your ID is inactive.", "error");
       } else {
         setAuthenticatedJudge(valid);
+        localStorage.setItem(`judge_auth_${teamId}`, JSON.stringify(valid));
         addToast(`Welcome, ${valid.name}`, "success");
       }
     } else {
@@ -1565,6 +1593,10 @@ const JudgeApp = ({
         },
         timestamp: serverTimestamp(),
       });
+
+      // Clear persistence on success
+      localStorage.removeItem(`judge_scores_${teamId}`);
+
       setIsDone(true);
       addToast("Scores Submitted Successfully!", "success");
     } catch (err) {
@@ -1592,8 +1624,10 @@ const JudgeApp = ({
         </div>
         <h2 className="text-xl font-bold text-slate-900">Invalid QR Code</h2>
         <p className="text-slate-500 mt-2">
-          Team ID not found in this database.
+          The team ID found in this QR code does not exist in the current
+          database.
         </p>
+        <p className="text-xs text-slate-400 mt-4 font-mono">ID: {teamId}</p>
       </div>
     );
 
@@ -1684,9 +1718,7 @@ const JudgeApp = ({
                       [...Array(criterion.max)].map((_, i) => (
                         <button
                           key={i}
-                          onClick={() =>
-                            setScores({ ...scores, [criterion.id]: i + 1 })
-                          }
+                          onClick={() => updateScore(criterion.id, i + 1)}
                           className={`transition-all transform active:scale-90 ${
                             (scores[criterion.id] || 0) > i
                               ? "text-yellow-400 fill-yellow-400 scale-110"
@@ -1711,10 +1743,7 @@ const JudgeApp = ({
                           max={criterion.max}
                           value={scores[criterion.id] || 0}
                           onChange={(e) =>
-                            setScores({
-                              ...scores,
-                              [criterion.id]: parseInt(e.target.value),
-                            })
+                            updateScore(criterion.id, parseInt(e.target.value))
                           }
                           className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                         />
@@ -1942,17 +1971,7 @@ const ParticipantsView = ({
                   </button>
                   <button
                     onClick={() =>
-                      deleteDoc(
-                        doc(
-                          db,
-                          "artifacts",
-                          currentAppId,
-                          "public",
-                          "data",
-                          "teams",
-                          t.id
-                        )
-                      )
+                      deleteDoc(getDocRef(currentAppId, "teams", t.id))
                     }
                     className="text-red-600"
                   >
