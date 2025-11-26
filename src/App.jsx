@@ -68,6 +68,7 @@ import {
   LogIn,
   UserPlus,
   ListOrdered,
+  ExternalLink,
 } from "lucide-react";
 
 // ==========================================
@@ -409,10 +410,8 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
     email: "",
     password: "",
   });
-  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    // Uses 'MASTER_SYSTEM_ID' as the tenant prefix for the system users collection
     const unsub = onSnapshot(
       getCollectionRef(MASTER_SYSTEM_ID, "system_users"),
       (snap) => {
@@ -428,12 +427,6 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
       return;
     }
 
-    if (!auth.currentUser) {
-      // Ensure we are connected before trying to write
-      await signInAnonymously(auth);
-    }
-
-    setIsCreating(true);
     const uniqueAppId = "event-" + Math.random().toString(36).substr(2, 9);
 
     try {
@@ -446,12 +439,9 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
       setNewClient({ orgName: "", email: "", password: "" });
       setIsModalOpen(false);
     } catch (e) {
+      alert("Error creating client. Check console for permissions.");
       console.error(e);
-      alert(
-        "Failed to create client. Ensure you are connected to the internet and have permissions."
-      );
     }
-    setIsCreating(false);
   };
 
   return (
@@ -595,9 +585,7 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={createClient} disabled={isCreating}>
-              {isCreating ? "Creating..." : "Create Database"}
-            </Button>
+            <Button onClick={createClient}>Create Database</Button>
           </div>
         </div>
       </Modal>
@@ -1617,6 +1605,7 @@ const JudgeApp = ({
     setIsSubmitting(false);
   };
 
+  // FIX: Wait for data load before showing invalid
   if (!isDataLoaded && teams.length === 0) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-500 gap-4">
@@ -2650,7 +2639,7 @@ const ExportView = ({
           Download specific datasets or full reports.
         </p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="p-6 border-t-4 border-t-purple-500 hover:shadow-lg transition-shadow">
           <div className="mb-4 p-3 bg-purple-100 text-purple-600 rounded-lg w-fit">
             <UserCheck size={24} />
