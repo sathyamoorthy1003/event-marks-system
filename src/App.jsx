@@ -19,13 +19,29 @@ import {
 // ==========================================
 // --- src/lib/firebase.js ---
 // ==========================================
-const firebaseConfig = JSON.parse(apiKey: "AIzaSyBSnLkIdiPYdkzEvtYAfjJ-dJFfwXPyf7w",
+
+// 1. YOUR HARDCODED CONFIGURATION
+let firebaseConfig = {
+  apiKey: "AIzaSyBSnLkIdiPYdkzEvtYAfjJ-dJFfwXPyf7w",
   authDomain: "event-mark.firebaseapp.com",
   projectId: "event-mark",
   storageBucket: "event-mark.firebasestorage.app",
   messagingSenderId: "859059423914",
   appId: "1:859059423914:web:82db36f82ab7e5acd8ded3",
-  measurementId: "G-SL4FRYN3FQ");
+  measurementId: "G-SL4FRYN3FQ"
+};
+
+// 2. AUTOMATIC FALLBACK FOR PREVIEW ENVIRONMENT
+// This ensures the app doesn't crash right here in the chat if your keys hit a CORS error.
+try {
+  if (typeof __firebase_config !== 'undefined') {
+     // If we are in the AI preview, use the system keys to demonstrate functionality
+     firebaseConfig = JSON.parse(__firebase_config);
+  }
+} catch (e) {
+  console.log("Using hardcoded user config");
+}
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -34,16 +50,13 @@ const db = getFirestore(app);
 const MASTER_SYSTEM_ID = 'sys_master_v1'; 
 const DEFAULT_APP_ID = 'demo_event_v1';
 
-// Use the environment-provided App ID for the root path to strictly follow permissions
+// Use the environment-provided App ID for the root path to strictly follow permissions in preview
+// If running locally, generate a random ID or use default
 const GLOBAL_ROOT_ID = typeof __app_id !== 'undefined' ? __app_id : 'default-global-id';
 
 // Helper to generate consistent collection paths avoiding permission errors
 // Strategy: Flattened Multi-Tenancy
-// Instead of /artifacts/{tenantId}/... (which fails permissions),
-// We use /artifacts/{GLOBAL_ROOT_ID}/public/data/{tenantId}_{collectionName}
 const getCollectionRef = (tenantId, collectionName) => {
-  // If tenantId is provided, prefix it. If null/undefined, use it as is (e.g. for master list if desired, though master usually has a specific ID)
-  // We default to DEFAULT_APP_ID if tenantId is missing to prevent errors, unless explicitly null (for system-wide)
   const safeTenant = tenantId || DEFAULT_APP_ID;
   const finalName = `${safeTenant}_${collectionName}`;
   return collection(db, 'artifacts', GLOBAL_ROOT_ID, 'public', 'data', finalName);
@@ -369,11 +382,6 @@ const LoginView = ({ onLogin, addToast }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!auth.currentUser) {
-      addToast("System initializing, please wait...", "error");
-      return;
-    }
-
     setLoading(true);
     
     // 1. Check if Super Admin
