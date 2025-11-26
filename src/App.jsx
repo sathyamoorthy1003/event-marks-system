@@ -79,7 +79,7 @@ try {
   if (typeof __firebase_config !== "undefined") {
     firebaseConfig = JSON.parse(__firebase_config);
   } else {
-    // Fallback for local dev environment
+    // Fallback for local dev environment - Replace with your keys if needed
     firebaseConfig = {
       apiKey: "AIzaSyBSnLkIdiPYdkzEvtYAfjJ-dJFfwXPyf7w",
       authDomain: "event-mark.firebaseapp.com",
@@ -101,8 +101,11 @@ const db = getFirestore(app);
 // CONSTANTS
 const MASTER_SYSTEM_ID = "sys_master_v1";
 const DEFAULT_APP_ID = "demo_event_v1";
+
+// CRITICAL FIX: Use __app_id if available (Preview), otherwise fallback string (Vercel/Local)
+// This fixes the "Permission Denied" error by ensuring we write to the allowed path.
 const GLOBAL_ROOT_ID =
-  typeof __app_id !== "undefined" ? __app_id : "default-global-id";
+  typeof __app_id !== "undefined" ? __app_id : "event_marks_saas_v1";
 
 // Helper to generate consistent collection paths
 const getCollectionRef = (tenantId, collectionName) => {
@@ -134,7 +137,7 @@ const getDocRef = (tenantId, collectionName, docId) => {
 
 // Helper for safe date formatting
 const formatDate = (timestamp) => {
-  if (!timestamp) return "...";
+  if (!timestamp) return "-";
   try {
     if (typeof timestamp.toDate === "function")
       return timestamp.toDate().toLocaleString();
@@ -411,10 +414,15 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
   });
 
   useEffect(() => {
+    // Uses 'MASTER_SYSTEM_ID' as the tenant prefix for the system users collection
+    // Also added error logging for debugging
     const unsub = onSnapshot(
       getCollectionRef(MASTER_SYSTEM_ID, "system_users"),
       (snap) => {
         setClients(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (error) => {
+        console.error("Error fetching clients:", error);
       }
     );
     return () => unsub();
@@ -1624,10 +1632,8 @@ const JudgeApp = ({
         </div>
         <h2 className="text-xl font-bold text-slate-900">Invalid QR Code</h2>
         <p className="text-slate-500 mt-2">
-          The team ID found in this QR code does not exist in the current
-          database.
+          Team ID not found in this database.
         </p>
-        <p className="text-xs text-slate-400 mt-4 font-mono">ID: {teamId}</p>
       </div>
     );
 
@@ -1971,7 +1977,17 @@ const ParticipantsView = ({
                   </button>
                   <button
                     onClick={() =>
-                      deleteDoc(getDocRef(currentAppId, "teams", t.id))
+                      deleteDoc(
+                        doc(
+                          db,
+                          "artifacts",
+                          currentAppId,
+                          "public",
+                          "data",
+                          "teams",
+                          t.id
+                        )
+                      )
                     }
                     className="text-red-600"
                   >
