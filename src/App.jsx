@@ -79,7 +79,7 @@ try {
   if (typeof __firebase_config !== "undefined") {
     firebaseConfig = JSON.parse(__firebase_config);
   } else {
-    // Fallback for local dev environment - Replace with your keys if needed
+    // Fallback for local dev environment
     firebaseConfig = {
       apiKey: "AIzaSyBSnLkIdiPYdkzEvtYAfjJ-dJFfwXPyf7w",
       authDomain: "event-mark.firebaseapp.com",
@@ -101,9 +101,6 @@ const db = getFirestore(app);
 // CONSTANTS
 const MASTER_SYSTEM_ID = "sys_master_v1";
 const DEFAULT_APP_ID = "demo_event_v1";
-
-// CRITICAL FIX: Use __app_id if available (Preview), otherwise fallback string (Vercel/Local)
-// This fixes the "Permission Denied" error by ensuring we write to the allowed path.
 const GLOBAL_ROOT_ID =
   typeof __app_id !== "undefined" ? __app_id : "event_marks_saas_v1";
 
@@ -412,17 +409,14 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
     email: "",
     password: "",
   });
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     // Uses 'MASTER_SYSTEM_ID' as the tenant prefix for the system users collection
-    // Also added error logging for debugging
     const unsub = onSnapshot(
       getCollectionRef(MASTER_SYSTEM_ID, "system_users"),
       (snap) => {
         setClients(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      },
-      (error) => {
-        console.error("Error fetching clients:", error);
       }
     );
     return () => unsub();
@@ -434,6 +428,12 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
       return;
     }
 
+    if (!auth.currentUser) {
+      // Ensure we are connected before trying to write
+      await signInAnonymously(auth);
+    }
+
+    setIsCreating(true);
     const uniqueAppId = "event-" + Math.random().toString(36).substr(2, 9);
 
     try {
@@ -446,9 +446,12 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
       setNewClient({ orgName: "", email: "", password: "" });
       setIsModalOpen(false);
     } catch (e) {
-      alert("Error creating client. Check console for permissions.");
       console.error(e);
+      alert(
+        "Failed to create client. Ensure you are connected to the internet and have permissions."
+      );
     }
+    setIsCreating(false);
   };
 
   return (
@@ -592,7 +595,9 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={createClient}>Create Database</Button>
+            <Button onClick={createClient} disabled={isCreating}>
+              {isCreating ? "Creating..." : "Create Database"}
+            </Button>
           </div>
         </div>
       </Modal>
@@ -1237,14 +1242,16 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
     if (selectedIds.size === teams.length) setSelectedIds(new Set());
     else setSelectedIds(new Set(teams.map((t) => t.id)));
   };
-  const getQrUrl = (teamId) => {
+  // FIX: Use 'team.code' (the visible participant ID) instead of 'team.id' (internal Firestore ID) for the QR URL
+  const getQrUrl = (teamCode) => {
     const baseUrl = window.location.origin + window.location.pathname;
-    return `${baseUrl}?team=${teamId}&tenant=${currentAppId}`;
+    // Using team.code as requested by user for "Participant ID"
+    return `${baseUrl}?team=${teamCode}&tenant=${currentAppId}`;
   };
   const downloadSingle = async (team) => {
     try {
       const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-        getQrUrl(team.id)
+        getQrUrl(team.code)
       )}`;
       const response = await fetch(url);
       const blob = await response.blob();
@@ -1271,7 +1278,7 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
       await Promise.all(
         selectedTeams.map(async (team) => {
           const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-            getQrUrl(team.id)
+            getQrUrl(team.code)
           )}`;
           const response = await fetch(url);
           const blob = await response.blob();
@@ -1308,7 +1315,7 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
           }</span><div class="name">${
             t.name
           }</div><img class="img" src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-            getQrUrl(t.id)
+            getQrUrl(t.code)
           )}" /></div>`
       )
       .join("");
@@ -1337,7 +1344,7 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
     for (let i = 0; i < selectedTeams.length; i++) {
       const team = selectedTeams[i];
       const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-        getQrUrl(team.id)
+        getQrUrl(team.code)
       )}`;
       try {
         const resp = await fetch(url);
@@ -1469,7 +1476,7 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
             <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-                  getQrUrl(team.id)
+                  getQrUrl(team.code)
                 )}`}
                 alt={`QR for ${team.name}`}
                 className="w-32 h-32 object-contain"
@@ -1492,7 +1499,7 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
               </Button>
               <Button
                 className="flex-1 text-[10px] px-1"
-                onClick={() => onSimulateScan(team.id)}
+                onClick={() => onSimulateScan(team.code)}
               >
                 Scan
               </Button>
@@ -1518,14 +1525,15 @@ const JudgeApp = ({
   currentAppId,
   isDataLoaded,
 }) => {
-  const team = teams.find((t) => t.id === teamId);
+  const team = teams.find((t) => t.id === teamId || t.code === teamId);
   const [judgeId, setJudgeId] = useState("");
   const [authenticatedJudge, setAuthenticatedJudge] = useState(null);
   const [scores, setScores] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDone, setIsDone] = useState(false);
+  const [manualTeamId, setManualTeamId] = useState("");
+  const [showManualEntry, setShowManualEntry] = useState(false);
 
-  // Load session persistence for judge
   useEffect(() => {
     const savedJudge = localStorage.getItem(`judge_auth_${teamId}`);
     if (savedJudge) {
@@ -1533,7 +1541,6 @@ const JudgeApp = ({
     }
   }, [teamId]);
 
-  // Load unsaved scores if any
   useEffect(() => {
     const savedScores = localStorage.getItem(`judge_scores_${teamId}`);
     if (savedScores) {
@@ -1548,16 +1555,15 @@ const JudgeApp = ({
   };
 
   const alreadyScored = useMemo(() => {
-    if (!authenticatedJudge) return false;
+    if (!authenticatedJudge || !team) return false;
     return submissions.some(
       (s) =>
-        s.teamId === teamId && s.invigilatorId === authenticatedJudge.judgeId
+        s.teamId === team.id && s.invigilatorId === authenticatedJudge.judgeId
     );
-  }, [authenticatedJudge, submissions, teamId]);
+  }, [authenticatedJudge, submissions, team]);
 
   const verifyJudge = () => {
     const normalizedInput = judgeId.trim().toUpperCase();
-    // FIX: If invigilators haven't loaded yet, show error
     if (invigilators.length === 0 && !isDataLoaded) {
       addToast("System is loading judge data, please wait...", "error");
       return;
@@ -1601,10 +1607,7 @@ const JudgeApp = ({
         },
         timestamp: serverTimestamp(),
       });
-
-      // Clear persistence on success
       localStorage.removeItem(`judge_scores_${teamId}`);
-
       setIsDone(true);
       addToast("Scores Submitted Successfully!", "success");
     } catch (err) {
@@ -1614,7 +1617,6 @@ const JudgeApp = ({
     setIsSubmitting(false);
   };
 
-  // FIX: Wait for data load before showing invalid
   if (!isDataLoaded && teams.length === 0) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-500 gap-4">
@@ -1630,10 +1632,31 @@ const JudgeApp = ({
         <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
           <X size={32} />
         </div>
-        <h2 className="text-xl font-bold text-slate-900">Invalid QR Code</h2>
-        <p className="text-slate-500 mt-2">
-          Team ID not found in this database.
+        <h2 className="text-xl font-bold text-slate-900">Team Not Found</h2>
+        <p className="text-slate-500 mt-2 mb-6">
+          The ID "{teamId}" was not found in the database.
         </p>
+        {showManualEntry ? (
+          <div className="w-full max-w-xs space-y-4 animate-in fade-in slide-in-from-bottom-4">
+            <Input
+              placeholder="Enter Correct Team ID (e.g. TM-001)"
+              value={manualTeamId}
+              onChange={(e) => setManualTeamId(e.target.value)}
+            />
+            <Button
+              className="w-full"
+              onClick={() =>
+                (window.location.href = `?team=${manualTeamId}&tenant=${currentAppId}`)
+              }
+            >
+              Go to Team
+            </Button>
+          </div>
+        ) : (
+          <Button onClick={() => setShowManualEntry(true)}>
+            Enter ID Manually
+          </Button>
+        )}
       </div>
     );
 
@@ -2754,6 +2777,27 @@ export default function App() {
     }
   };
 
+  // FIX: Clear state on logout to ensure fresh data for next user
+  const handleLogout = () => {
+    localStorage.removeItem("event_marks_session");
+
+    // Clear local state to prevent data leaking
+    setTeams([]);
+    setInvigilators([]);
+    setSubmissions([]);
+    setAuditLogs([]);
+    setIsDataLoaded(false);
+
+    if (userRole === "super_admin_impersonating") {
+      setUserRole("super_admin");
+      setView("admin_dashboard");
+      // Don't need to clear admin login
+    } else {
+      setAdminLoggedIn(false);
+      setUserRole("client");
+    }
+  };
+
   useEffect(() => {
     const savedSession = localStorage.getItem("event_marks_session");
     if (savedSession && !activeTeamId) {
@@ -2769,6 +2813,9 @@ export default function App() {
     if (!user) return;
     if (!adminLoggedIn && !activeTeamId) return;
     if (userRole === "super_admin" && view === "admin_dashboard") return;
+
+    // Reset loaded state when switching apps to show loading spinner
+    setIsDataLoaded(false);
 
     // Only set isDataLoaded to true after teams are fetched, as that's critical for Judge View
     const unsubTeams = onSnapshot(
@@ -2864,10 +2911,7 @@ export default function App() {
   if (adminLoggedIn && userRole === "super_admin" && view === "admin_dashboard")
     return (
       <SuperAdminDashboard
-        onLogout={() => {
-          localStorage.removeItem("event_marks_session");
-          setAdminLoggedIn(false);
-        }}
+        onLogout={handleLogout}
         onAccessDatabase={(client) => {
           setActiveAppId(client.uniqueAppId);
           setUserRole("super_admin_impersonating");
@@ -2923,15 +2967,7 @@ export default function App() {
       <Sidebar
         view={view}
         setView={setView}
-        onLogout={() => {
-          localStorage.removeItem("event_marks_session");
-          if (userRole === "super_admin_impersonating") {
-            setUserRole("super_admin");
-            setView("admin_dashboard");
-          } else {
-            setAdminLoggedIn(false);
-          }
-        }}
+        onLogout={handleLogout}
         userRole={userRole}
         activeAppId={activeAppId}
       />
