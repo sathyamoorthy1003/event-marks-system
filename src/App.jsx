@@ -39,6 +39,7 @@ import {
   LogOut,
   ChevronRight,
   Search,
+  FileJson,
   AlertCircle,
   Save,
   FileText,
@@ -57,26 +58,28 @@ import {
   FileType,
   Star,
   Bell,
+  Calculator,
   ChevronLeft,
   Eye,
-  Loader,
+  Loader2,
+  KeyRound,
   Mail,
   Database,
   LogIn,
   UserPlus,
+  ListOrdered,
 } from "lucide-react";
 
 // ==========================================
 // --- src/lib/firebase.js ---
 // ==========================================
 
-// Use __firebase_config environment variable if available (Preview Environment)
 let firebaseConfig;
 try {
   if (typeof __firebase_config !== "undefined") {
     firebaseConfig = JSON.parse(__firebase_config);
   } else {
-    // Fallback for local dev environment (Replace with your keys)
+    // Fallback for local dev environment
     firebaseConfig = {
       apiKey: "AIzaSyBSnLkIdiPYdkzEvtYAfjJ-dJFfwXPyf7w",
       authDomain: "event-mark.firebaseapp.com",
@@ -127,6 +130,20 @@ const getDocRef = (tenantId, collectionName, docId) => {
     finalName,
     docId
   );
+};
+
+// Helper for safe date formatting to prevent Object render errors
+const formatDate = (timestamp) => {
+  if (!timestamp) return "...";
+  try {
+    if (typeof timestamp.toDate === "function")
+      return timestamp.toDate().toLocaleString();
+    if (timestamp.seconds)
+      return new Date(timestamp.seconds * 1000).toLocaleString();
+  } catch (e) {
+    return "";
+  }
+  return "";
 };
 
 // ==========================================
@@ -392,6 +409,7 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
   });
 
   useEffect(() => {
+    // Uses 'MASTER_SYSTEM_ID' as the tenant prefix for the system users collection
     const unsub = onSnapshot(
       getCollectionRef(MASTER_SYSTEM_ID, "system_users"),
       (snap) => {
@@ -503,7 +521,7 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
                   <Mail size={14} /> {client.email}
                 </div>
                 <div className="flex items-center gap-2 text-sm text-slate-500 font-mono bg-slate-100 px-2 py-1 rounded w-fit">
-                  <Lock size={14} /> {client.password}
+                  <KeyRound size={14} /> {client.password}
                 </div>
                 <div className="text-xs text-slate-400 mt-2">
                   DB ID: {client.uniqueAppId}
@@ -653,7 +671,7 @@ const LoginView = ({ onLogin, addToast }) => {
           <Input
             label="Password"
             type="password"
-            icon={Lock}
+            icon={KeyRound}
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -676,12 +694,12 @@ const LoginView = ({ onLogin, addToast }) => {
 const Sidebar = ({ view, setView, onLogout, userRole, activeAppId }) => {
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "ranking", label: "Ranking Logic", icon: Activity }, // Changed Calculator to Activity
+    { id: "ranking", label: "Ranking Logic", icon: Calculator },
     { id: "participants", label: "Participants", icon: Users },
     { id: "qr", label: "QR Codes", icon: QrCode },
     { id: "invigilators", label: "Invigilators", icon: UserCheck },
     { id: "submissions", label: "Submissions", icon: FileSpreadsheet },
-    { id: "audit", label: "Audit Logs", icon: FileText }, // Changed FileJson to FileText
+    { id: "audit", label: "Audit Logs", icon: FileJson },
     { id: "export", label: "Export Data", icon: Download },
     { id: "rubric", label: "Rubric Config", icon: Settings },
   ];
@@ -1047,7 +1065,7 @@ const RankingLogicView = ({
         </Card>
         <Card className="p-6 bg-slate-900 text-white">
           <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-            <Activity size={20} /> The Formula
+            <Calculator size={20} /> The Formula
           </h3>
           {localConfig.method === "bayesian" ? (
             <div className="space-y-4">
@@ -1210,10 +1228,16 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
     else setSelectedIds(new Set(teams.map((t) => t.id)));
   };
 
+  const getQrUrl = (teamId) => {
+    const baseUrl = window.location.origin + window.location.pathname;
+    // FIX: Keep any existing query params if needed, but append team and tenant
+    return `${baseUrl}?team=${teamId}&tenant=${currentAppId}`;
+  };
+
   const downloadSingle = async (team) => {
     try {
       const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-        window.location.href + "?team=" + team.id
+        getQrUrl(team.id)
       )}`;
       const response = await fetch(url);
       const blob = await response.blob();
@@ -1244,7 +1268,7 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
       await Promise.all(
         selectedTeams.map(async (team) => {
           const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-            window.location.href + "?team=" + team.id
+            getQrUrl(team.id)
           )}`;
           const response = await fetch(url);
           const blob = await response.blob();
@@ -1258,9 +1282,7 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
       const content = await zip.generateAsync({ type: "blob" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(content);
-      link.download = `QR_Codes_Batch_${new Date()
-        .toISOString()
-        .slice(0, 10)}.zip`;
+      link.download = `QR_Codes_Batch.zip`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1295,7 +1317,7 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
         <span class="code">${t.code}</span>
         <div class="name">${t.name}</div>
         <img class="img" src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-          window.location.href + "?team=" + t.id
+          getQrUrl(t.id)
         )}" />
       </div>
     `
@@ -1306,7 +1328,7 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
       <html>
         <head><title>Print QR Codes</title><style>${styles}</style></head>
         <body>
-          <h1 class="no-print">Print QR Codes (Ctrl+P / Cmd+P to Save as PDF)</h1>
+          <h1 class="no-print">Print QR Codes</h1>
           <div class="grid">${content}</div>
         </body>
       </html>
@@ -1337,7 +1359,7 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
     for (let i = 0; i < selectedTeams.length; i++) {
       const team = selectedTeams[i];
       const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-        window.location.href + "?team=" + team.id
+        getQrUrl(team.id)
       )}`;
       try {
         const resp = await fetch(url);
@@ -1385,9 +1407,7 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
       const blob = await Packer.toBlob(doc);
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `QR_Codes_Doc_${new Date()
-        .toISOString()
-        .slice(0, 10)}.docx`;
+      link.download = `QR_Codes_Doc.docx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1480,7 +1500,7 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
             <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-                  window.location.href + "?team=" + team.id
+                  getQrUrl(team.id)
                 )}`}
                 alt={`QR for ${team.name}`}
                 className="w-32 h-32 object-contain"
@@ -1593,10 +1613,28 @@ const JudgeApp = ({
     setIsSubmitting(false);
   };
 
+  // FIX: Added loading state check
+  if (teams.length === 0) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-500 gap-4">
+        <Loader2 size={48} className="animate-spin text-blue-600" />
+        <p>Loading Event Data...</p>
+      </div>
+    );
+  }
+
   if (!team)
     return (
-      <div className="h-screen flex items-center justify-center text-red-500">
-        Invalid QR Code
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
+        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+          <X size={32} />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">Invalid QR Code</h2>
+        <p className="text-slate-500 mt-2">
+          The team ID found in this QR code does not exist in the current
+          database.
+        </p>
+        <p className="text-xs text-slate-400 mt-4 font-mono">ID: {teamId}</p>
       </div>
     );
 
@@ -2200,7 +2238,7 @@ const InvigilatorsView = ({
             <Button
               variant="secondary"
               onClick={() => fileInputRef.current.click()}
-              icon={isImporting ? Loader : Upload}
+              icon={isImporting ? Loader2 : Upload}
               disabled={isImporting}
             >
               {isImporting ? "Importing..." : "Import CSV"}
@@ -2494,7 +2532,13 @@ const SettingsView = ({ rubric, setRubric, addToast, currentAppId }) => {
 // ==========================================
 // --- src/pages/Export.jsx ---
 // ==========================================
-const ExportView = ({ submissions, rubric, teams, invigilators }) => {
+const ExportView = ({
+  submissions,
+  rubric,
+  teams,
+  invigilators,
+  leaderboard,
+}) => {
   const downloadCSV = (content, filename) => {
     const encodedUri = encodeURI(content);
     const link = document.createElement("a");
@@ -2553,6 +2597,31 @@ const ExportView = ({ submissions, rubric, teams, invigilators }) => {
     );
   };
 
+  // New: Export Rank List
+  const exportRankList = () => {
+    const headers = [
+      "Rank",
+      "Team Code",
+      "Team Name",
+      "Evaluations Count",
+      "Raw Total Score",
+      "Final Weighted Score",
+    ];
+    const rows = leaderboard.map((team, index) => [
+      index + 1,
+      team.teamCode,
+      team.teamName,
+      team.count,
+      team.total?.toFixed(2),
+      team.finalScore?.toFixed(2),
+    ]);
+    downloadCSV(
+      "data:text/csv;charset=utf-8," +
+        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n"),
+      "rank_list.csv"
+    );
+  };
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div>
@@ -2561,13 +2630,13 @@ const ExportView = ({ submissions, rubric, teams, invigilators }) => {
           Download specific datasets or full reports.
         </p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="p-6 border-t-4 border-t-purple-500 hover:shadow-lg transition-shadow">
           <div className="mb-4 p-3 bg-purple-100 text-purple-600 rounded-lg w-fit">
             <UserCheck size={24} />
           </div>
-          <h3 className="font-bold text-lg text-slate-800">Judge Data Sheet</h3>
-          <p className="text-sm text-slate-500 mt-1 mb-6">
+          <h3 className="font-bold text-lg text-slate-800">Judge Data</h3>
+          <p className="text-xs text-slate-500 mt-1 mb-6">
             List of all registered invigilators.
           </p>
           <Button
@@ -2582,11 +2651,9 @@ const ExportView = ({ submissions, rubric, teams, invigilators }) => {
           <div className="mb-4 p-3 bg-blue-100 text-blue-600 rounded-lg w-fit">
             <Users size={24} />
           </div>
-          <h3 className="font-bold text-lg text-slate-800">
-            Student Team Data
-          </h3>
-          <p className="text-sm text-slate-500 mt-1 mb-6">
-            List of all participating teams.
+          <h3 className="font-bold text-lg text-slate-800">Team Data</h3>
+          <p className="text-xs text-slate-500 mt-1 mb-6">
+            List of participating teams.
           </p>
           <Button
             variant="secondary"
@@ -2600,13 +2667,23 @@ const ExportView = ({ submissions, rubric, teams, invigilators }) => {
           <div className="mb-4 p-3 bg-emerald-100 text-emerald-600 rounded-lg w-fit">
             <FileText size={24} />
           </div>
-          <h3 className="font-bold text-lg text-slate-800">
-            Master Score Sheet
-          </h3>
-          <p className="text-sm text-slate-500 mt-1 mb-6">
-            Complete record of all scores.
+          <h3 className="font-bold text-lg text-slate-800">Score Sheet</h3>
+          <p className="text-xs text-slate-500 mt-1 mb-6">
+            Detailed score records.
           </p>
           <Button onClick={exportOverallData} className="w-full">
+            Download CSV
+          </Button>
+        </Card>
+        <Card className="p-6 border-t-4 border-t-orange-500 hover:shadow-lg transition-shadow">
+          <div className="mb-4 p-3 bg-orange-100 text-orange-600 rounded-lg w-fit">
+            <ListOrdered size={24} />
+          </div>
+          <h3 className="font-bold text-lg text-slate-800">Rank List</h3>
+          <p className="text-xs text-slate-500 mt-1 mb-6">
+            Leaderboard sorted by rank.
+          </p>
+          <Button onClick={exportRankList} className="w-full">
             Download CSV
           </Button>
         </Card>
@@ -2656,17 +2733,17 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const scannedTeamId = params.get("team");
-    const scannedTenantId = params.get("tenant"); // Get tenant from URL
+    const scannedTenantId = params.get("tenant");
     if (scannedTeamId && scannedTenantId) {
       setActiveTeamId(scannedTeamId);
-      setActiveAppId(scannedTenantId); // Set the tenant ID
+      setActiveAppId(scannedTenantId);
     } else if (scannedTeamId) {
-      // Fallback for legacy links or missing tenant param - assumes default
       setActiveTeamId(scannedTeamId);
     }
   }, []);
 
   const handleLoginSuccess = (userData) => {
+    localStorage.setItem("event_marks_session", JSON.stringify(userData));
     if (userData.role === "super_admin") {
       setUserRole("super_admin");
       setAdminLoggedIn(true);
@@ -2680,12 +2757,21 @@ export default function App() {
   };
 
   useEffect(() => {
+    const savedSession = localStorage.getItem("event_marks_session");
+    if (savedSession && !activeTeamId) {
+      const session = JSON.parse(savedSession);
+      setUserRole(session.role);
+      setActiveAppId(session.dbId);
+      setAdminLoggedIn(true);
+      if (session.role === "super_admin") setView("admin_dashboard");
+    }
+  }, [activeTeamId]);
+
+  useEffect(() => {
     if (!user) return;
     if (!adminLoggedIn && !activeTeamId) return;
-    // Skip fetching event data if we are in super admin dashboard view
     if (userRole === "super_admin" && view === "admin_dashboard") return;
 
-    // Use helper functions with activeAppId as the tenantId
     const unsubTeams = onSnapshot(
       query(
         getCollectionRef(activeAppId, "teams"),
@@ -2773,15 +2859,13 @@ export default function App() {
       .sort((a, b) => b.finalScore - a.finalScore);
   }, [submissions, rankingConfig]);
 
-  // Render Super Admin Dashboard
-  if (
-    adminLoggedIn &&
-    userRole === "super_admin" &&
-    view === "admin_dashboard"
-  ) {
+  if (adminLoggedIn && userRole === "super_admin" && view === "admin_dashboard")
     return (
       <SuperAdminDashboard
-        onLogout={() => setAdminLoggedIn(false)}
+        onLogout={() => {
+          localStorage.removeItem("event_marks_session");
+          setAdminLoggedIn(false);
+        }}
         onAccessDatabase={(client) => {
           setActiveAppId(client.uniqueAppId);
           setUserRole("super_admin_impersonating");
@@ -2789,10 +2873,8 @@ export default function App() {
         }}
       />
     );
-  }
 
-  // Render Judge App (Public)
-  if (activeTeamId && !adminLoggedIn && !userRole) {
+  if (activeTeamId)
     return (
       <>
         <ToastContainer
@@ -2813,30 +2895,7 @@ export default function App() {
         />
       </>
     );
-  } else if (activeTeamId) {
-    return (
-      <>
-        <ToastContainer
-          toasts={toasts}
-          removeToast={(id) =>
-            setToasts((prev) => prev.filter((t) => t.id !== id))
-          }
-        />
-        <JudgeApp
-          teamId={activeTeamId}
-          teams={teams}
-          rubric={rubric}
-          invigilators={invigilators}
-          submissions={submissions}
-          onExit={() => setActiveTeamId(null)}
-          addToast={addToast}
-          currentAppId={activeAppId}
-        />
-      </>
-    );
-  }
 
-  // Render Login View
   if (!adminLoggedIn)
     return (
       <>
@@ -2850,7 +2909,6 @@ export default function App() {
       </>
     );
 
-  // Render Main Admin/Client Dashboard
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
       <ToastContainer
@@ -2863,6 +2921,7 @@ export default function App() {
         view={view}
         setView={setView}
         onLogout={() => {
+          localStorage.removeItem("event_marks_session");
           if (userRole === "super_admin_impersonating") {
             setUserRole("super_admin");
             setView("admin_dashboard");
@@ -2907,70 +2966,41 @@ export default function App() {
             rubric={rubric}
             teams={teams}
             invigilators={invigilators}
+            leaderboard={leaderboard}
           />
         )}
         {view === "audit" && (
           <div className="space-y-6 max-w-5xl mx-auto">
             <h2 className="text-2xl font-bold">Audit Logs</h2>
             <div className="space-y-4">
-              {auditLogs.map((log) => {
-                let badgeColor = "gray";
-                let icon = <Activity size={16} />;
-                if (log.action?.includes("add")) {
-                  badgeColor = "blue";
-                  icon = <Plus size={16} />;
-                } else if (log.action?.includes("submit")) {
-                  badgeColor = "green";
-                  icon = <CheckCircle size={16} />;
-                } else if (
-                  log.action?.includes("toggle") ||
-                  log.action?.includes("status")
-                ) {
-                  badgeColor = "orange";
-                  icon = <Lock size={16} />;
-                }
-                return (
-                  <Card
-                    key={log.id}
-                    className="p-4 border-l-4 border-l-slate-400 flex items-start gap-4"
-                  >
-                    <div
-                      className={`p-2 rounded-full bg-${
-                        badgeColor === "gray" ? "slate" : badgeColor
-                      }-100 text-${
-                        badgeColor === "gray" ? "slate" : badgeColor
-                      }-600`}
-                    >
-                      {icon}
+              {auditLogs.map((log) => (
+                <Card
+                  key={log.id}
+                  className="p-4 border-l-4 border-l-slate-400 flex items-start gap-4"
+                >
+                  <div className="p-2 rounded-full bg-slate-100 text-slate-600">
+                    <Activity size={16} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-center mb-1">
+                      <h4 className="font-bold text-slate-800 capitalize">
+                        {log.action?.replace(/_/g, " ")}
+                      </h4>
+                      <span className="text-xs text-slate-400 font-mono">
+                        {formatDate(log.timestamp)}
+                      </span>
                     </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-center mb-1">
-                        <h4 className="font-bold text-slate-800 capitalize">
-                          {log.action.replace(/_/g, " ")}
-                        </h4>
-                        <span className="text-xs text-slate-400 font-mono">
-                          {log.timestamp?.toDate()?.toLocaleString()}
+                    <div className="text-sm text-slate-600 font-mono bg-slate-50 p-2 rounded border border-slate-100">
+                      {Object.entries(log.details || {}).map(([k, v]) => (
+                        <span key={k} className="mr-4">
+                          <span className="font-bold text-slate-500">{k}:</span>{" "}
+                          {typeof v === "object" ? JSON.stringify(v) : v}
                         </span>
-                      </div>
-                      <div className="text-sm text-slate-600 font-mono bg-slate-50 p-2 rounded border border-slate-100">
-                        {Object.entries(log.details || {}).map(([k, v]) => (
-                          <span key={k} className="mr-4">
-                            <span className="font-bold text-slate-500">
-                              {k}:
-                            </span>{" "}
-                            {typeof v === "object" ? JSON.stringify(v) : v}
-                          </span>
-                        ))}
-                      </div>
+                      ))}
                     </div>
-                  </Card>
-                );
-              })}
-              {auditLogs.length === 0 && (
-                <div className="p-10 text-center text-slate-400">
-                  No activity recorded yet.
-                </div>
-              )}
+                  </div>
+                </Card>
+              ))}
             </div>
           </div>
         )}
@@ -3017,7 +3047,7 @@ export default function App() {
                   {submissions.map((s) => (
                     <tr key={s.id}>
                       <td className="px-6 py-3 text-slate-400">
-                        {s.timestamp?.toDate()?.toLocaleTimeString()}
+                        {formatDate(s.timestamp)}
                       </td>
                       <td className="px-6 py-3 font-bold">{s.teamName}</td>
                       <td className="px-6 py-3 font-mono">{s.invigilatorId}</td>
