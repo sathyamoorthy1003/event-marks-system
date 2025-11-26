@@ -13,7 +13,7 @@ import {
   X, LogOut, ChevronRight, Search, FileJson, AlertCircle, Save,
   FileText, Shield, Activity, Upload, FileDown, Printer, Power, Lock, Unlock,
   ClipboardList, CheckSquare, Square, FileArchive, FileType, Star, Bell, Calculator,
-  ChevronLeft, Eye, Loader2, KeyRound, Mail, Database, LogIn, UserPlus, ListOrdered
+  ChevronLeft, Eye, Loader2, KeyRound, Mail, Database, LogIn, UserPlus, ListOrdered, ExternalLink
 } from 'lucide-react';
 
 // ==========================================
@@ -25,7 +25,7 @@ try {
   if (typeof __firebase_config !== 'undefined') {
     firebaseConfig = JSON.parse(__firebase_config);
   } else {
-    // Fallback for local dev environment
+    // Fallback for local dev environment - Replace with your keys
     firebaseConfig = {
       apiKey: "AIzaSyBSnLkIdiPYdkzEvtYAfjJ-dJFfwXPyf7w",
       authDomain: "event-mark.firebaseapp.com",
@@ -74,6 +74,23 @@ const formatDate = (timestamp) => {
   }
   if (typeof timestamp === 'object') return ''; 
   return String(timestamp);
+};
+
+// Helper to robustly get URL parameters from Search or Hash
+const getUrlParam = (key) => {
+  // Check standard query string
+  const searchParams = new URLSearchParams(window.location.search);
+  if (searchParams.has(key)) return searchParams.get(key);
+  
+  // Check hash routing (e.g., /#/page?team=123)
+  if (window.location.hash && window.location.hash.includes('?')) {
+    const hashParts = window.location.hash.split('?');
+    if (hashParts.length > 1) {
+      const hashParams = new URLSearchParams(hashParts[1]);
+      if (hashParams.has(key)) return hashParams.get(key);
+    }
+  }
+  return null;
 };
 
 // ==========================================
@@ -684,15 +701,27 @@ export default function App() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   };
 
+  // Helper to get params from either query string or hash
+  const getUrlParam = (key) => {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.has(key)) return searchParams.get(key);
+    if (window.location.hash.includes('?')) {
+      const hashParams = new URLSearchParams(window.location.hash.split('?')[1]);
+      if (hashParams.has(key)) return hashParams.get(key);
+    }
+    return null;
+  };
+
   useEffect(() => {
     const init = async () => { if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token); else await signInAnonymously(auth); };
     init(); onAuthStateChanged(auth, setUser);
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const scannedTeamId = params.get('team');
-    const scannedTenantId = params.get('tenant'); 
+    // Enhanced URL parsing to support hash routing which might be used in QR codes
+    const scannedTeamId = getUrlParam('team');
+    const scannedTenantId = getUrlParam('tenant');
+    
     if (scannedTeamId && scannedTenantId) {
       setActiveTeamId(scannedTeamId);
       setActiveAppId(scannedTenantId); 
@@ -749,6 +778,7 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
+    // If we are just a public judge viewing a team, we still need to fetch data for that specific app ID
     if (!adminLoggedIn && !activeTeamId) return;
     if (userRole === 'super_admin' && view === 'admin_dashboard') return;
 
@@ -767,7 +797,7 @@ export default function App() {
     const unsubRanking = onSnapshot(getDocRef(activeAppId, 'ranking_config', 'main'), (docSnap) => setRankingConfig(docSnap.exists() ? docSnap.data() : { method: 'sum' }));
     
     return () => { unsubTeams(); unsubInv(); unsubSub(); unsubLogs(); unsubRubric(); unsubRanking(); };
-  }, [user, adminLoggedIn, activeAppId, userRole, view]);
+  }, [user, adminLoggedIn, activeAppId, userRole, view, activeTeamId]); // Added activeTeamId to dependency to re-fetch if URL changes
 
   const leaderboard = useMemo(() => {
     const scores = {};
@@ -800,6 +830,7 @@ export default function App() {
 
   if (adminLoggedIn && userRole === 'super_admin' && view === 'admin_dashboard') return <SuperAdminDashboard onLogout={handleLogout} onAccessDatabase={(client) => {setActiveAppId(client.uniqueAppId); setUserRole('super_admin_impersonating'); setView('dashboard');}} />;
   
+  // Fix: Pass isDataLoaded to JudgeApp so it knows when to stop showing loading spinner
   if (activeTeamId) return (<><ToastContainer toasts={toasts} removeToast={(id) => setToasts(prev => prev.filter(t => t.id !== id))} /><JudgeApp teamId={activeTeamId} teams={teams} rubric={rubric} invigilators={invigilators} submissions={submissions} onExit={() => setActiveTeamId(null)} addToast={addToast} currentAppId={activeAppId} isDataLoaded={isDataLoaded}/></>);
   
   if (!adminLoggedIn) return (<><ToastContainer toasts={toasts} removeToast={(id) => setToasts(prev => prev.filter(t => t.id !== id))} /><LoginView onLogin={handleLoginSuccess} addToast={addToast} /></>);
@@ -830,3 +861,5 @@ export default function App() {
     </div>
   );
 }
+
+
