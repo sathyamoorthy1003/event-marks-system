@@ -132,7 +132,7 @@ const getDocRef = (tenantId, collectionName, docId) => {
   );
 };
 
-// Helper for safe date formatting to prevent Object render errors
+// Helper for safe date formatting
 const formatDate = (timestamp) => {
   if (!timestamp) return "...";
   try {
@@ -143,7 +143,9 @@ const formatDate = (timestamp) => {
   } catch (e) {
     return "";
   }
-  return "";
+  // If it's an object but we don't know what it is, avoid crashing React
+  if (typeof timestamp === "object") return JSON.stringify(timestamp);
+  return String(timestamp);
 };
 
 // ==========================================
@@ -259,7 +261,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 };
 
 const ToastContainer = ({ toasts, removeToast }) => (
-  <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2">
+  <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2">
     {toasts.map((toast) => (
       <div
         key={toast.id}
@@ -409,7 +411,6 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
   });
 
   useEffect(() => {
-    // Uses 'MASTER_SYSTEM_ID' as the tenant prefix for the system users collection
     const unsub = onSnapshot(
       getCollectionRef(MASTER_SYSTEM_ID, "system_users"),
       (snap) => {
@@ -608,7 +609,6 @@ const LoginView = ({ onLogin, addToast }) => {
       email.toLowerCase() === "sathyamoorthyc1003@gmail.com" &&
       password === "Prakash@1"
     ) {
-      await new Promise((r) => setTimeout(r, 500));
       onLogin({ role: "super_admin", name: "Sathyamoorthy" });
       setLoading(false);
       return;
@@ -945,6 +945,7 @@ const RankingLogicView = ({
     mValue: 3.0,
   });
   const [calculatedStats, setCalculatedStats] = useState({ c: 0, m: 0 });
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (rankingConfig) {
@@ -979,6 +980,7 @@ const RankingLogicView = ({
   }, [submissions]);
 
   const saveConfig = async () => {
+    setIsSaving(true);
     try {
       const configToSave = {
         ...localConfig,
@@ -1003,6 +1005,7 @@ const RankingLogicView = ({
       console.error(e);
       addToast("Error saving configuration", "error");
     }
+    setIsSaving(false);
   };
 
   return (
@@ -1185,8 +1188,8 @@ const RankingLogicView = ({
         </Card>
       )}
       <div className="fixed bottom-0 left-64 right-0 p-4 bg-white border-t border-slate-200 flex justify-end gap-4 z-10">
-        <Button onClick={saveConfig} icon={Save}>
-          Save Ranking Logic
+        <Button onClick={saveConfig} disabled={isSaving} icon={Save}>
+          {isSaving ? "Saving..." : "Save Ranking Logic"}
         </Button>
       </div>
     </div>
@@ -1222,18 +1225,14 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
     else newSet.add(id);
     setSelectedIds(newSet);
   };
-
   const toggleSelectAll = () => {
     if (selectedIds.size === teams.length) setSelectedIds(new Set());
     else setSelectedIds(new Set(teams.map((t) => t.id)));
   };
-
   const getQrUrl = (teamId) => {
     const baseUrl = window.location.origin + window.location.pathname;
-    // FIX: Keep any existing query params if needed, but append team and tenant
     return `${baseUrl}?team=${teamId}&tenant=${currentAppId}`;
   };
-
   const downloadSingle = async (team) => {
     try {
       const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
@@ -1252,18 +1251,14 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
       addToast("Error downloading QR", "error");
     }
   };
-
   const downloadZip = async () => {
     if (selectedIds.size === 0)
       return addToast("Select at least one team", "error");
-    if (!window.JSZip)
-      return addToast("Zip library loading... try again.", "error");
-
+    if (!window.JSZip) return addToast("Zip library loading...", "error");
     setIsProcessing(true);
     const zip = new window.JSZip();
     const folder = zip.folder("QR_Codes");
     const selectedTeams = teams.filter((t) => selectedIds.has(t.id));
-
     try {
       await Promise.all(
         selectedTeams.map(async (team) => {
@@ -1278,7 +1273,6 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
           );
         })
       );
-
       const content = await zip.generateAsync({ type: "blob" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(content);
@@ -1293,54 +1287,32 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
     }
     setIsProcessing(false);
   };
-
   const handlePrint = (team = null) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return addToast("Allow popups to print", "error");
-
-    const styles = `
-      body { font-family: sans-serif; padding: 20px; }
-      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-      .card { border: 1px dashed #ccc; padding: 30px; text-align: center; page-break-inside: avoid; border-radius: 12px; }
-      .code { font-size: 28px; font-weight: 800; margin-bottom: 5px; display: block; letter-spacing: 2px; }
-      .name { font-size: 20px; margin-bottom: 15px; font-weight: 600; }
-      .img { width: 180px; height: 180px; }
-      @media print { .no-print { display: none; } }
-    `;
-
+    const styles = `body { font-family: sans-serif; padding: 20px; } .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; } .card { border: 1px dashed #ccc; padding: 30px; text-align: center; page-break-inside: avoid; border-radius: 12px; } .code { font-size: 28px; font-weight: 800; margin-bottom: 5px; display: block; letter-spacing: 2px; } .name { font-size: 20px; margin-bottom: 15px; font-weight: 600; } .img { width: 180px; height: 180px; } @media print { .no-print { display: none; } }`;
     const dataToPrint = team ? [team] : teams;
-
     const content = dataToPrint
       .map(
-        (t) => `
-      <div class="card">
-        <span class="code">${t.code}</span>
-        <div class="name">${t.name}</div>
-        <img class="img" src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-          getQrUrl(t.id)
-        )}" />
-      </div>
-    `
+        (t) =>
+          `<div class="card"><span class="code">${
+            t.code
+          }</span><div class="name">${
+            t.name
+          }</div><img class="img" src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+            getQrUrl(t.id)
+          )}" /></div>`
       )
       .join("");
-
-    printWindow.document.write(`
-      <html>
-        <head><title>Print QR Codes</title><style>${styles}</style></head>
-        <body>
-          <h1 class="no-print">Print QR Codes</h1>
-          <div class="grid">${content}</div>
-        </body>
-      </html>
-    `);
+    printWindow.document.write(
+      `<html><head><title>Print QR Codes</title><style>${styles}</style></head><body><h1 class="no-print">Print QR Codes</h1><div class="grid">${content}</div></body></html>`
+    );
     printWindow.document.close();
   };
-
   const downloadWord = async () => {
     if (selectedIds.size === 0)
       return addToast("Select at least one team", "error");
     if (!window.docx) return addToast("Word generator loading...", "error");
-
     setIsProcessing(true);
     const selectedTeams = teams.filter((t) => selectedIds.has(t.id));
     const {
@@ -1353,9 +1325,7 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
       HeadingLevel,
       PageBreak,
     } = window.docx;
-
     const children = [];
-
     for (let i = 0; i < selectedTeams.length; i++) {
       const team = selectedTeams[i];
       const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
@@ -1365,7 +1335,6 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
         const resp = await fetch(url);
         const blob = await resp.blob();
         const arrayBuffer = await blob.arrayBuffer();
-
         children.push(
           new Paragraph({
             text: `${team.code}`,
@@ -1390,19 +1359,15 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
             spacing: { after: 200 },
           })
         );
-
-        if (i < selectedTeams.length - 1) {
+        if (i < selectedTeams.length - 1)
           children.push(new Paragraph({ children: [new PageBreak()] }));
-        }
       } catch (e) {
-        console.error("Err fetching image for docx", e);
+        console.error("Err fetching image", e);
       }
     }
-
     const doc = new Document({
       sections: [{ properties: {}, children: children }],
     });
-
     try {
       const blob = await Packer.toBlob(doc);
       const link = document.createElement("a");
@@ -1467,7 +1432,6 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
           </Button>
         </div>
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {teams.map((team) => (
           <div
@@ -1486,17 +1450,14 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
                 className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
               />
             </div>
-
             <div className="w-full font-mono text-2xl font-bold text-slate-800 tracking-wider border-b border-slate-100 pb-2 mt-2">
               {team.code}
             </div>
-
             <div className="w-full">
               <h3 className="font-bold text-lg text-slate-900 truncate">
                 {team.name}
               </h3>
             </div>
-
             <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
@@ -1506,7 +1467,6 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
                 className="w-32 h-32 object-contain"
               />
             </div>
-
             <div className="flex gap-2 w-full pt-2">
               <Button
                 variant="secondary"
@@ -1548,6 +1508,7 @@ const JudgeApp = ({
   onExit,
   addToast,
   currentAppId,
+  isDataLoaded,
 }) => {
   const team = teams.find((t) => t.id === teamId);
   const [judgeId, setJudgeId] = useState("");
@@ -1584,7 +1545,6 @@ const JudgeApp = ({
       return addToast("Please fill all criteria.", "error");
     setIsSubmitting(true);
     const total = Object.values(scores).reduce((a, b) => a + b, 0);
-
     try {
       await addDoc(getCollectionRef(currentAppId, "submissions"), {
         teamId: team.id,
@@ -1613,8 +1573,8 @@ const JudgeApp = ({
     setIsSubmitting(false);
   };
 
-  // FIX: Added loading state check
-  if (teams.length === 0) {
+  // FIX: Wait for data load before showing invalid
+  if (!isDataLoaded && teams.length === 0) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-500 gap-4">
         <Loader2 size={48} className="animate-spin text-blue-600" />
@@ -1631,10 +1591,8 @@ const JudgeApp = ({
         </div>
         <h2 className="text-xl font-bold text-slate-900">Invalid QR Code</h2>
         <p className="text-slate-500 mt-2">
-          The team ID found in this QR code does not exist in the current
-          database.
+          Team ID not found in this database.
         </p>
-        <p className="text-xs text-slate-400 mt-4 font-mono">ID: {teamId}</p>
       </div>
     );
 
@@ -1652,7 +1610,6 @@ const JudgeApp = ({
           <X size={20} />
         </button>
       </div>
-
       <div className="flex-1 p-4 max-w-md mx-auto w-full">
         {!authenticatedJudge ? (
           <Card className="p-6 space-y-6 mt-10">
@@ -1721,7 +1678,6 @@ const JudgeApp = ({
                       Max: {criterion.max}
                     </span>
                   </div>
-
                   <div className="flex flex-wrap gap-2 items-center">
                     {criterion.inputType === "stars" ? (
                       [...Array(criterion.max)].map((_, i) => (
@@ -1769,11 +1725,6 @@ const JudgeApp = ({
                   </div>
                 </Card>
               ))}
-              {rubric.length === 0 && (
-                <p className="text-center text-slate-400">
-                  No criteria defined.
-                </p>
-              )}
             </div>
             <div className="sticky bottom-4">
               <Button
@@ -1957,7 +1908,7 @@ const ParticipantsView = ({
           <Button
             variant="secondary"
             onClick={() => fileInputRef.current.click()}
-            icon={isImporting ? Loader : Upload}
+            icon={isImporting ? Loader2 : Upload}
             disabled={isImporting}
           >
             {isImporting ? "Importing..." : "Import CSV"}
@@ -1990,7 +1941,17 @@ const ParticipantsView = ({
                   </button>
                   <button
                     onClick={() =>
-                      deleteDoc(getDocRef(currentAppId, "teams", t.id))
+                      deleteDoc(
+                        doc(
+                          db,
+                          "artifacts",
+                          currentAppId,
+                          "public",
+                          "data",
+                          "teams",
+                          t.id
+                        )
+                      )
                     }
                     className="text-red-600"
                   >
@@ -2701,6 +2662,7 @@ export default function App() {
   const [adminLoggedIn, setAdminLoggedIn] = useState(false);
   const [activeAppId, setActiveAppId] = useState(DEFAULT_APP_ID);
   const [userRole, setUserRole] = useState("client");
+  const [isDataLoaded, setIsDataLoaded] = useState(false); // Track if data is ready
 
   const [teams, setTeams] = useState([]);
   const [invigilators, setInvigilators] = useState([]);
@@ -2772,12 +2734,16 @@ export default function App() {
     if (!adminLoggedIn && !activeTeamId) return;
     if (userRole === "super_admin" && view === "admin_dashboard") return;
 
+    // Only set isDataLoaded to true after teams are fetched, as that's critical for Judge View
     const unsubTeams = onSnapshot(
       query(
         getCollectionRef(activeAppId, "teams"),
         orderBy("createdAt", "desc")
       ),
-      (s) => setTeams(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+      (s) => {
+        setTeams(s.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setIsDataLoaded(true);
+      }
     );
     const unsubInv = onSnapshot(
       getCollectionRef(activeAppId, "invigilators"),
@@ -2892,6 +2858,7 @@ export default function App() {
           onExit={() => setActiveTeamId(null)}
           addToast={addToast}
           currentAppId={activeAppId}
+          isDataLoaded={isDataLoaded}
         />
       </>
     );
