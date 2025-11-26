@@ -79,7 +79,7 @@ try {
   if (typeof __firebase_config !== "undefined") {
     firebaseConfig = JSON.parse(__firebase_config);
   } else {
-    // Fallback for local dev environment
+    // Fallback for local dev environment - Replace with your keys
     firebaseConfig = {
       apiKey: "AIzaSyBSnLkIdiPYdkzEvtYAfjJ-dJFfwXPyf7w",
       authDomain: "event-mark.firebaseapp.com",
@@ -399,7 +399,7 @@ const SampleDataPreview = ({ type, onClose }) => {
 };
 
 // ==========================================
-// --- SUB-VIEWS DEFINITION (ORDER MATTERS) ---
+// --- SUB-VIEWS DEFINITION ---
 // ==========================================
 
 const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
@@ -583,6 +583,274 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
             <Button onClick={createClient}>Create Database</Button>
           </div>
         </div>
+      </Modal>
+    </div>
+  );
+};
+
+const ParticipantsView = ({
+  teams,
+  submissions,
+  rubric,
+  addToast,
+  currentAppId,
+}) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [newTeamName, setNewTeamName] = useState("");
+  const [newTeamCode, setNewTeamCode] = useState("");
+  const [page, setPage] = useState(1);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef(null);
+  const itemsPerPage = 20;
+
+  const paginatedTeams = useMemo(() => {
+    const start = (page - 1) * itemsPerPage;
+    return teams.slice(start, start + itemsPerPage);
+  }, [teams, page]);
+
+  const addParticipant = async () => {
+    if (!newTeamName || !newTeamCode)
+      return addToast("Fill all fields.", "error");
+    if (teams.some((t) => t.code === newTeamCode))
+      return addToast("ID exists.", "error");
+    try {
+      await addDoc(getCollectionRef(currentAppId, "teams"), {
+        name: newTeamName,
+        code: newTeamCode,
+        createdAt: serverTimestamp(),
+      });
+      await addDoc(getCollectionRef(currentAppId, "audit_logs"), {
+        action: "add_participant",
+        details: { name: newTeamName, code: newTeamCode },
+        timestamp: serverTimestamp(),
+      });
+      setNewTeamName("");
+      setNewTeamCode("");
+      setIsModalOpen(false);
+      addToast("Participant Added", "success");
+    } catch (err) {
+      console.error(err);
+      addToast("Error adding participant: " + err.message, "error");
+    }
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target.result;
+      const rows = text
+        .split(/\r\n|\n/)
+        .map((row) => row.trim())
+        .filter((r) => r);
+      const BATCH_SIZE = 450;
+      const allData = [];
+
+      for (let i = 1; i < rows.length; i++) {
+        const cols = rows[i].split(",");
+        if (cols[0]) {
+          allData.push({
+            name: cols[0].trim(),
+            code:
+              cols[1]?.trim() ||
+              `TM-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
+            createdAt: serverTimestamp(),
+          });
+        }
+      }
+
+      for (let i = 0; i < allData.length; i += BATCH_SIZE) {
+        const batch = writeBatch(db);
+        const chunk = allData.slice(i, i + BATCH_SIZE);
+        chunk.forEach((item) => {
+          const newRef = doc(getCollectionRef(currentAppId, "teams"));
+          batch.set(newRef, item);
+        });
+        await batch.commit();
+      }
+
+      await addDoc(getCollectionRef(currentAppId, "audit_logs"), {
+        action: "import_participants",
+        details: { count: allData.length },
+        timestamp: serverTimestamp(),
+      });
+      addToast(`Imported ${allData.length} participants`, "success");
+    };
+    reader.readAsText(file);
+  };
+
+  const downloadParticipantReport = (team) => {
+    const teamSubs = submissions.filter((s) => s.teamId === team.id);
+    if (teamSubs.length === 0)
+      return addToast("No evaluations found.", "error");
+    const csv =
+      "data:text/csv;charset=utf-8,Judge," +
+      rubric.map((r) => r.name).join(",") +
+      ",Total,Time\n" +
+      teamSubs
+        .map((s) =>
+          [
+            s.invigilatorId,
+            ...rubric.map((r) => s.scores[r.id] || 0),
+            s.totalScore,
+            s.timestamp?.toDate()?.toLocaleString(),
+          ].join(",")
+        )
+        .join("\n");
+    const link = document.createElement("a");
+    link.href = encodeURI(csv);
+    link.download = `${team.name}_report.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    addToast("Report Downloaded", "success");
+  };
+
+  const downloadTemplate = () => {
+    const csvContent =
+      "Team Name,Team Code (Mandatory)\nTeam Alpha,TM-001\nTeam Beta,TM-002";
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "participants_template.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="space-y-6 max-w-6xl mx-auto">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Participants</h2>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            accept=".csv"
+            onChange={handleFileUpload}
+          />
+          <Button
+            variant="secondary"
+            onClick={() => setIsPreviewOpen(true)}
+            icon={Eye}
+          >
+            Preview Format
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={downloadTemplate}
+            icon={FileDown}
+          >
+            Template
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => fileInputRef.current.click()}
+            icon={isImporting ? Loader2 : Upload}
+            disabled={isImporting}
+          >
+            {isImporting ? "Importing..." : "Import CSV"}
+          </Button>
+          <Button onClick={() => setIsModalOpen(true)} icon={Plus}>
+            Add Manually
+          </Button>
+        </div>
+      </div>
+      <Card>
+        <table className="w-full text-left text-sm">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="px-6 py-3">ID</th>
+              <th className="px-6 py-3">Name</th>
+              <th className="px-6 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginatedTeams.map((t) => (
+              <tr key={t.id} className="hover:bg-slate-50">
+                <td className="px-6 py-3 font-mono text-blue-600">{t.code}</td>
+                <td className="px-6 py-3 font-bold">{t.name}</td>
+                <td className="px-6 py-3 text-right flex justify-end gap-2">
+                  <button
+                    onClick={() => downloadParticipantReport(t)}
+                    className="text-blue-600"
+                  >
+                    <ClipboardList size={16} />
+                  </button>
+                  <button
+                    onClick={() =>
+                      deleteDoc(
+                        doc(
+                          db,
+                          "artifacts",
+                          currentAppId,
+                          "public",
+                          "data",
+                          "teams",
+                          t.id
+                        )
+                      )
+                    }
+                    className="text-red-600"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {teams.length === 0 && (
+              <tr>
+                <td colSpan="3" className="p-8 text-center text-slate-400">
+                  No participants.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        <Pagination
+          totalItems={teams.length}
+          itemsPerPage={itemsPerPage}
+          currentPage={page}
+          onPageChange={setPage}
+        />
+      </Card>
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title="Add Participant"
+      >
+        <div className="space-y-4">
+          <Input
+            label="Name"
+            value={newTeamName}
+            onChange={(e) => setNewTeamName(e.target.value)}
+          />
+          <Input
+            label="ID"
+            value={newTeamCode}
+            onChange={(e) => setNewTeamCode(e.target.value.toUpperCase())}
+          />
+          <div className="flex justify-end gap-2 pt-4">
+            <Button onClick={addParticipant}>Add</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        title="CSV Template Preview"
+      >
+        <SampleDataPreview
+          type="participant"
+          onClose={() => setIsPreviewOpen(false)}
+        />
       </Modal>
     </div>
   );
@@ -1686,274 +1954,6 @@ const JudgeApp = ({
   );
 };
 
-const ParticipantsView = ({
-  teams,
-  submissions,
-  rubric,
-  addToast,
-  currentAppId,
-}) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [newTeamName, setNewTeamName] = useState("");
-  const [newTeamCode, setNewTeamCode] = useState("");
-  const [page, setPage] = useState(1);
-  const [isImporting, setIsImporting] = useState(false);
-  const fileInputRef = useRef(null);
-  const itemsPerPage = 20;
-
-  const paginatedTeams = useMemo(() => {
-    const start = (page - 1) * itemsPerPage;
-    return teams.slice(start, start + itemsPerPage);
-  }, [teams, page]);
-
-  const addParticipant = async () => {
-    if (!newTeamName || !newTeamCode)
-      return addToast("Fill all fields.", "error");
-    if (teams.some((t) => t.code === newTeamCode))
-      return addToast("ID exists.", "error");
-    try {
-      await addDoc(getCollectionRef(currentAppId, "teams"), {
-        name: newTeamName,
-        code: newTeamCode,
-        createdAt: serverTimestamp(),
-      });
-      await addDoc(getCollectionRef(currentAppId, "audit_logs"), {
-        action: "add_participant",
-        details: { name: newTeamName, code: newTeamCode },
-        timestamp: serverTimestamp(),
-      });
-      setNewTeamName("");
-      setNewTeamCode("");
-      setIsModalOpen(false);
-      addToast("Participant Added", "success");
-    } catch (err) {
-      console.error(err);
-      addToast("Error adding participant: " + err.message, "error");
-    }
-  };
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target.result;
-      const rows = text
-        .split(/\r\n|\n/)
-        .map((row) => row.trim())
-        .filter((r) => r);
-      const BATCH_SIZE = 450;
-      const allData = [];
-
-      for (let i = 1; i < rows.length; i++) {
-        const cols = rows[i].split(",");
-        if (cols[0]) {
-          allData.push({
-            name: cols[0].trim(),
-            code:
-              cols[1]?.trim() ||
-              `TM-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
-            createdAt: serverTimestamp(),
-          });
-        }
-      }
-
-      for (let i = 0; i < allData.length; i += BATCH_SIZE) {
-        const batch = writeBatch(db);
-        const chunk = allData.slice(i, i + BATCH_SIZE);
-        chunk.forEach((item) => {
-          const newRef = doc(getCollectionRef(currentAppId, "teams"));
-          batch.set(newRef, item);
-        });
-        await batch.commit();
-      }
-
-      await addDoc(getCollectionRef(currentAppId, "audit_logs"), {
-        action: "import_participants",
-        details: { count: allData.length },
-        timestamp: serverTimestamp(),
-      });
-      addToast(`Imported ${allData.length} participants`, "success");
-    };
-    reader.readAsText(file);
-  };
-
-  const downloadParticipantReport = (team) => {
-    const teamSubs = submissions.filter((s) => s.teamId === team.id);
-    if (teamSubs.length === 0)
-      return addToast("No evaluations found.", "error");
-    const csv =
-      "data:text/csv;charset=utf-8,Judge," +
-      rubric.map((r) => r.name).join(",") +
-      ",Total,Time\n" +
-      teamSubs
-        .map((s) =>
-          [
-            s.invigilatorId,
-            ...rubric.map((r) => s.scores[r.id] || 0),
-            s.totalScore,
-            s.timestamp?.toDate()?.toLocaleString(),
-          ].join(",")
-        )
-        .join("\n");
-    const link = document.createElement("a");
-    link.href = encodeURI(csv);
-    link.download = `${team.name}_report.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    addToast("Report Downloaded", "success");
-  };
-
-  const downloadTemplate = () => {
-    const csvContent =
-      "Team Name,Team Code (Mandatory)\nTeam Alpha,TM-001\nTeam Beta,TM-002";
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "participants_template.csv";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">Participants</h2>
-        </div>
-        <div className="flex gap-2">
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            accept=".csv"
-            onChange={handleFileUpload}
-          />
-          <Button
-            variant="secondary"
-            onClick={() => setIsPreviewOpen(true)}
-            icon={Eye}
-          >
-            Preview Format
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={downloadTemplate}
-            icon={FileDown}
-          >
-            Template
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => fileInputRef.current.click()}
-            icon={isImporting ? Loader2 : Upload}
-            disabled={isImporting}
-          >
-            {isImporting ? "Importing..." : "Import CSV"}
-          </Button>
-          <Button onClick={() => setIsModalOpen(true)} icon={Plus}>
-            Add Manually
-          </Button>
-        </div>
-      </div>
-      <Card>
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-6 py-3">ID</th>
-              <th className="px-6 py-3">Name</th>
-              <th className="px-6 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedTeams.map((t) => (
-              <tr key={t.id} className="hover:bg-slate-50">
-                <td className="px-6 py-3 font-mono text-blue-600">{t.code}</td>
-                <td className="px-6 py-3 font-bold">{t.name}</td>
-                <td className="px-6 py-3 text-right flex justify-end gap-2">
-                  <button
-                    onClick={() => downloadParticipantReport(t)}
-                    className="text-blue-600"
-                  >
-                    <ClipboardList size={16} />
-                  </button>
-                  <button
-                    onClick={() =>
-                      deleteDoc(
-                        doc(
-                          db,
-                          "artifacts",
-                          currentAppId,
-                          "public",
-                          "data",
-                          "teams",
-                          t.id
-                        )
-                      )
-                    }
-                    className="text-red-600"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {teams.length === 0 && (
-              <tr>
-                <td colSpan="3" className="p-8 text-center text-slate-400">
-                  No participants.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        <Pagination
-          totalItems={teams.length}
-          itemsPerPage={itemsPerPage}
-          currentPage={page}
-          onPageChange={setPage}
-        />
-      </Card>
-
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Add Participant"
-      >
-        <div className="space-y-4">
-          <Input
-            label="Name"
-            value={newTeamName}
-            onChange={(e) => setNewTeamName(e.target.value)}
-          />
-          <Input
-            label="ID"
-            value={newTeamCode}
-            onChange={(e) => setNewTeamCode(e.target.value.toUpperCase())}
-          />
-          <div className="flex justify-end gap-2 pt-4">
-            <Button onClick={addParticipant}>Add</Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={isPreviewOpen}
-        onClose={() => setIsPreviewOpen(false)}
-        title="CSV Template Preview"
-      >
-        <SampleDataPreview
-          type="participant"
-          onClose={() => setIsPreviewOpen(false)}
-        />
-      </Modal>
-    </div>
-  );
-};
-
 const InvigilatorsView = ({
   invigilators,
   submissions,
@@ -2268,77 +2268,326 @@ const InvigilatorsView = ({
 };
 
 // ==========================================
-// --- src/components/Sidebar.jsx ---
+// --- src/pages/Settings.jsx ---
 // ==========================================
-const Sidebar = ({ view, setView, onLogout, userRole, activeAppId }) => {
-  const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "ranking", label: "Ranking Logic", icon: Calculator },
-    { id: "participants", label: "Participants", icon: Users },
-    { id: "qr", label: "QR Codes", icon: QrCode },
-    { id: "invigilators", label: "Invigilators", icon: UserCheck },
-    { id: "submissions", label: "Submissions", icon: FileSpreadsheet },
-    { id: "audit", label: "Audit Logs", icon: FileJson },
-    { id: "export", label: "Export Data", icon: Download },
-    { id: "rubric", label: "Rubric Config", icon: Settings },
-  ];
+const SettingsView = ({ rubric, setRubric, addToast, currentAppId }) => {
+  const [localRubric, setLocalRubric] = useState(rubric || []);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (rubric.length > 0 && localRubric.length === 0) setLocalRubric(rubric);
+  }, [rubric]);
+
+  const handleFieldChange = (index, field, value) => {
+    const updated = [...localRubric];
+    updated[index][field] = value;
+    setLocalRubric(updated);
+  };
+  const addCriterion = () =>
+    setLocalRubric([
+      ...localRubric,
+      {
+        id: Date.now().toString(),
+        name: "",
+        min: 0,
+        max: 10,
+        weight: 1.0,
+        inputType: "number",
+      },
+    ]);
+  const removeCriterion = (index) => {
+    const updated = [...localRubric];
+    updated.splice(index, 1);
+    setLocalRubric(updated);
+  };
+
+  const saveRubric = async () => {
+    setIsSaving(true);
+    try {
+      const sanitizedRubric = localRubric.map((r) => ({
+        ...r,
+        min: r.min === "" ? 0 : Number(r.min),
+        max: r.max === "" ? 0 : Number(r.max),
+        weight: r.weight === "" ? 0 : Number(r.weight),
+        inputType: r.inputType || "number",
+      }));
+
+      await setDoc(getDocRef(currentAppId, "rubric_config", "main"), {
+        criteria: sanitizedRubric,
+        updatedAt: serverTimestamp(),
+      });
+      await addDoc(getCollectionRef(currentAppId, "audit_logs"), {
+        action: "rubric_update",
+        details: { criteriaCount: sanitizedRubric.length },
+        timestamp: serverTimestamp(),
+      });
+      addToast("Rubric Config Saved!", "success");
+    } catch (e) {
+      console.error(e);
+      addToast("Error saving.", "error");
+    }
+    setIsSaving(false);
+  };
 
   return (
-    <aside className="w-64 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col h-full">
-      <div className="p-6 border-b border-slate-100">
-        <div className="flex items-center gap-3">
-          <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center text-white ${
-              userRole === "super_admin" ? "bg-purple-600" : "bg-blue-600"
-            }`}
-          >
-            <Award size={22} />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-slate-900 leading-tight">
-              EventMarks
-            </h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              {userRole === "super_admin" ? "Impersonating" : "Client Portal"}
-            </p>
-          </div>
-        </div>
+    <div className="space-y-6 max-w-4xl mx-auto pb-20">
+      <div>
+        <h2 className="text-2xl font-bold text-slate-900">Scoring Rubric</h2>
+        <p className="text-slate-500">Configure evaluation criteria.</p>
       </div>
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {menuItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setView(item.id)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-              view === item.id
-                ? "bg-blue-50 text-blue-700 shadow-sm"
-                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-            }`}
+      <div className="space-y-4">
+        {localRubric.map((item, index) => (
+          <Card
+            key={item.id || index}
+            className="p-6 transition-all hover:shadow-md"
           >
-            <item.icon
-              size={18}
-              className={view === item.id ? "text-blue-600" : "text-slate-400"}
-            />
-            {item.label}
-            {view === item.id && (
-              <ChevronRight size={14} className="ml-auto opacity-50" />
-            )}
-          </button>
+            <div className="flex justify-between items-start mb-4">
+              <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wide">
+                Criterion {index + 1}
+              </h4>
+              <button
+                onClick={() => removeCriterion(index)}
+                className="text-slate-400 hover:text-red-500"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="col-span-2">
+                <Input
+                  label="Criterion Name"
+                  value={item.name}
+                  onChange={(e) =>
+                    handleFieldChange(index, "name", e.target.value)
+                  }
+                />
+              </div>
+              <div className="col-span-2 md:col-span-1">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">
+                  Input Type
+                </label>
+                <select
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  value={item.inputType || "number"}
+                  onChange={(e) =>
+                    handleFieldChange(index, "inputType", e.target.value)
+                  }
+                >
+                  <option value="number">Number Input (Slider)</option>
+                  <option value="stars">Star Rating</option>
+                </select>
+              </div>
+              <div className="col-span-2 md:col-span-1">
+                <Input
+                  label="Max Score"
+                  type="number"
+                  value={item.max}
+                  onChange={(e) =>
+                    handleFieldChange(
+                      index,
+                      "max",
+                      e.target.value === "" ? "" : parseFloat(e.target.value)
+                    )
+                  }
+                />
+              </div>
+              <div className="col-span-2 md:col-span-1">
+                <Input
+                  label="Weight (Multiplier)"
+                  type="number"
+                  step="0.1"
+                  value={item.weight}
+                  onChange={(e) =>
+                    handleFieldChange(
+                      index,
+                      "weight",
+                      e.target.value === "" ? "" : parseFloat(e.target.value)
+                    )
+                  }
+                />
+              </div>
+            </div>
+          </Card>
         ))}
-      </nav>
-      <div className="p-4 border-t border-slate-100">
-        <div className="mb-3 px-2 text-xs font-mono text-slate-400 break-all">
-          DB: {activeAppId}
-        </div>
-        <button
-          onClick={onLogout}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors text-sm font-medium"
-        >
-          <LogOut size={18} />
-          {userRole === "super_admin" ? "Exit to Admin" : "Sign Out"}
-        </button>
       </div>
-    </aside>
+      <button
+        onClick={addCriterion}
+        className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-medium hover:border-blue-400 hover:text-blue-600"
+      >
+        <Plus size={20} /> Add Criterion
+      </button>
+      <div className="fixed bottom-0 left-64 right-0 p-4 bg-white border-t border-slate-200 flex justify-end gap-4 z-10">
+        <Button variant="secondary" onClick={() => setLocalRubric(rubric)}>
+          Reset
+        </Button>
+        <Button onClick={saveRubric} disabled={isSaving} icon={Save}>
+          {isSaving ? "Saving..." : "Save Rubric"}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// --- src/pages/Export.jsx ---
+// ==========================================
+const ExportView = ({
+  submissions,
+  rubric,
+  teams,
+  invigilators,
+  leaderboard,
+}) => {
+  const downloadCSV = (content, filename) => {
+    const encodedUri = encodeURI(content);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+  const exportJudgeData = () => {
+    const headers = ["Judge ID", "Name", "Status"];
+    const rows = invigilators.map((i) => [
+      i.judgeId,
+      i.name,
+      i.status || "active",
+    ]);
+    downloadCSV(
+      "data:text/csv;charset=utf-8," +
+        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n"),
+      "judges_datasheet.csv"
+    );
+  };
+  const exportTeamData = () => {
+    const headers = ["Team ID", "Team Name"];
+    const rows = teams.map((t) => [t.code, t.name]);
+    downloadCSV(
+      "data:text/csv;charset=utf-8," +
+        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n"),
+      "teams_datasheet.csv"
+    );
+  };
+  const exportOverallData = () => {
+    const criteriaHeaders = rubric.map((r) => r.name);
+    const headers = [
+      "Submission ID",
+      "Team Code",
+      "Team Name",
+      "Invigilator ID",
+      ...criteriaHeaders,
+      "Total Score",
+      "Timestamp",
+    ];
+    const rows = submissions.map((sub) => [
+      sub.id,
+      sub.teamCode,
+      sub.teamName,
+      sub.invigilatorId,
+      ...rubric.map((r) => sub.scores[r.id] || 0),
+      sub.totalScore,
+      sub.timestamp?.toDate()?.toLocaleString(),
+    ]);
+    downloadCSV(
+      "data:text/csv;charset=utf-8," +
+        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n"),
+      "master_score_sheet.csv"
+    );
+  };
+
+  // New: Export Rank List
+  const exportRankList = () => {
+    const headers = [
+      "Rank",
+      "Team Code",
+      "Team Name",
+      "Evaluations Count",
+      "Raw Total Score",
+      "Final Weighted Score",
+    ];
+    const rows = leaderboard.map((team, index) => [
+      index + 1,
+      team.teamCode,
+      team.teamName,
+      team.count,
+      team.total?.toFixed(2),
+      team.finalScore?.toFixed(2),
+    ]);
+    downloadCSV(
+      "data:text/csv;charset=utf-8," +
+        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n"),
+      "rank_list.csv"
+    );
+  };
+
+  return (
+    <div className="space-y-6 max-w-5xl mx-auto">
+      <div>
+        <h2 className="text-2xl font-bold text-slate-900">Export Data</h2>
+        <p className="text-slate-500">
+          Download specific datasets or full reports.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card className="p-6 border-t-4 border-t-purple-500 hover:shadow-lg transition-shadow">
+          <div className="mb-4 p-3 bg-purple-100 text-purple-600 rounded-lg w-fit">
+            <UserCheck size={24} />
+          </div>
+          <h3 className="font-bold text-lg text-slate-800">Judge Data</h3>
+          <p className="text-xs text-slate-500 mt-1 mb-6">
+            List of all registered invigilators.
+          </p>
+          <Button
+            variant="secondary"
+            onClick={exportJudgeData}
+            className="w-full"
+          >
+            Download CSV
+          </Button>
+        </Card>
+        <Card className="p-6 border-t-4 border-t-blue-500 hover:shadow-lg transition-shadow">
+          <div className="mb-4 p-3 bg-blue-100 text-blue-600 rounded-lg w-fit">
+            <Users size={24} />
+          </div>
+          <h3 className="font-bold text-lg text-slate-800">Team Data</h3>
+          <p className="text-xs text-slate-500 mt-1 mb-6">
+            List of participating teams.
+          </p>
+          <Button
+            variant="secondary"
+            onClick={exportTeamData}
+            className="w-full"
+          >
+            Download CSV
+          </Button>
+        </Card>
+        <Card className="p-6 border-t-4 border-t-emerald-500 hover:shadow-lg transition-shadow">
+          <div className="mb-4 p-3 bg-emerald-100 text-emerald-600 rounded-lg w-fit">
+            <FileText size={24} />
+          </div>
+          <h3 className="font-bold text-lg text-slate-800">Score Sheet</h3>
+          <p className="text-xs text-slate-500 mt-1 mb-6">
+            Detailed score records.
+          </p>
+          <Button onClick={exportOverallData} className="w-full">
+            Download CSV
+          </Button>
+        </Card>
+        <Card className="p-6 border-t-4 border-t-orange-500 hover:shadow-lg transition-shadow">
+          <div className="mb-4 p-3 bg-orange-100 text-orange-600 rounded-lg w-fit">
+            <ListOrdered size={24} />
+          </div>
+          <h3 className="font-bold text-lg text-slate-800">Rank List</h3>
+          <p className="text-xs text-slate-500 mt-1 mb-6">
+            Leaderboard sorted by rank.
+          </p>
+          <Button onClick={exportRankList} className="w-full">
+            Download CSV
+          </Button>
+        </Card>
+      </div>
+    </div>
   );
 };
 
