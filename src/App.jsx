@@ -39,7 +39,6 @@ import {
   LogOut,
   ChevronRight,
   Search,
-  FileJson,
   AlertCircle,
   Save,
   FileText,
@@ -58,11 +57,9 @@ import {
   FileType,
   Star,
   Bell,
-  Calculator,
   ChevronLeft,
   Eye,
   Loader,
-  KeyRound,
   Mail,
   Database,
   LogIn,
@@ -73,9 +70,9 @@ import {
 // --- src/lib/firebase.js ---
 // ==========================================
 
+// Use __firebase_config environment variable if available (Preview Environment)
 let firebaseConfig;
 try {
-  // Using environment variable for preview environment
   if (typeof __firebase_config !== "undefined") {
     firebaseConfig = JSON.parse(__firebase_config);
   } else {
@@ -506,7 +503,7 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
                   <Mail size={14} /> {client.email}
                 </div>
                 <div className="flex items-center gap-2 text-sm text-slate-500 font-mono bg-slate-100 px-2 py-1 rounded w-fit">
-                  <KeyRound size={14} /> {client.password}
+                  <Lock size={14} /> {client.password}
                 </div>
                 <div className="text-xs text-slate-400 mt-2">
                   DB ID: {client.uniqueAppId}
@@ -656,7 +653,7 @@ const LoginView = ({ onLogin, addToast }) => {
           <Input
             label="Password"
             type="password"
-            icon={KeyRound}
+            icon={Lock}
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -679,12 +676,12 @@ const LoginView = ({ onLogin, addToast }) => {
 const Sidebar = ({ view, setView, onLogout, userRole, activeAppId }) => {
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "ranking", label: "Ranking Logic", icon: Calculator },
+    { id: "ranking", label: "Ranking Logic", icon: Activity }, // Changed Calculator to Activity
     { id: "participants", label: "Participants", icon: Users },
     { id: "qr", label: "QR Codes", icon: QrCode },
     { id: "invigilators", label: "Invigilators", icon: UserCheck },
     { id: "submissions", label: "Submissions", icon: FileSpreadsheet },
-    { id: "audit", label: "Audit Logs", icon: FileJson },
+    { id: "audit", label: "Audit Logs", icon: FileText }, // Changed FileJson to FileText
     { id: "export", label: "Export Data", icon: Download },
     { id: "rubric", label: "Rubric Config", icon: Settings },
   ];
@@ -1050,7 +1047,7 @@ const RankingLogicView = ({
         </Card>
         <Card className="p-6 bg-slate-900 text-white">
           <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-            <Calculator size={20} /> The Formula
+            <Activity size={20} /> The Formula
           </h3>
           {localConfig.method === "bayesian" ? (
             <div className="space-y-4">
