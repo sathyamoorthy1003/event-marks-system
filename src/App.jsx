@@ -73,14 +73,13 @@ import {
 // --- src/lib/firebase.js ---
 // ==========================================
 
-// Use __firebase_config environment variable if available (Preview Environment)
-// Otherwise fallback to the user's hardcoded config (Local Dev / Production)
 let firebaseConfig;
 try {
+  // Using environment variable for preview environment
   if (typeof __firebase_config !== "undefined") {
     firebaseConfig = JSON.parse(__firebase_config);
   } else {
-    // User's actual config (fallback for local/deployment if env var missing)
+    // Fallback for local dev environment (Replace with your keys)
     firebaseConfig = {
       apiKey: "AIzaSyBSnLkIdiPYdkzEvtYAfjJ-dJFfwXPyf7w",
       authDomain: "event-mark.firebaseapp.com",
@@ -102,13 +101,10 @@ const db = getFirestore(app);
 // CONSTANTS
 const MASTER_SYSTEM_ID = "sys_master_v1";
 const DEFAULT_APP_ID = "demo_event_v1";
-
-// Use the environment-provided App ID for the root path to strictly follow permissions
 const GLOBAL_ROOT_ID =
   typeof __app_id !== "undefined" ? __app_id : "default-global-id";
 
-// Helper to generate consistent collection paths avoiding permission errors
-// Strategy: Flattened Multi-Tenancy
+// Helper to generate consistent collection paths
 const getCollectionRef = (tenantId, collectionName) => {
   const safeTenant = tenantId || DEFAULT_APP_ID;
   const finalName = `${safeTenant}_${collectionName}`;
@@ -399,7 +395,6 @@ const SuperAdminDashboard = ({ onLogout, onAccessDatabase }) => {
   });
 
   useEffect(() => {
-    // Uses 'MASTER_SYSTEM_ID' as the tenant prefix for the system users collection
     const unsub = onSnapshot(
       getCollectionRef(MASTER_SYSTEM_ID, "system_users"),
       (snap) => {
@@ -1186,7 +1181,7 @@ const RankingLogicView = ({
 // ==========================================
 // --- src/pages/QRCodes.jsx ---
 // ==========================================
-const QRCodeManager = ({ teams, onSimulateScan, addToast }) => {
+const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -2996,6 +2991,7 @@ export default function App() {
             teams={teams}
             onSimulateScan={setActiveTeamId}
             addToast={addToast}
+            currentAppId={activeAppId}
           />
         )}
         {view === "invigilators" && (
