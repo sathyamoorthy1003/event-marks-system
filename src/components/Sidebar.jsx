@@ -11,7 +11,7 @@ import {
   Award,
 } from "lucide-react";
 
-const Sidebar = ({ view, setView, onLogout, userRole, activeAppId }) => {
+const Sidebar = ({ view, setView, onLogout, activeAppId }) => {
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "participants", label: "Participants", icon: Users },
@@ -54,22 +54,10 @@ const Sidebar = ({ view, setView, onLogout, userRole, activeAppId }) => {
       <div className="p-4 border-t border-slate-800">
         <button
           onClick={onLogout}
-          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-            userRole === "super_admin_impersonating"
-              ? "text-blue-400 hover:bg-blue-500/10 hover:text-blue-500"
-              : "text-slate-400 hover:bg-red-500/10 hover:text-red-500"
-          }`}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-500 transition-all"
         >
-          {userRole === "super_admin_impersonating" ? (
-            <LogOut size={20} className="rotate-180" />
-          ) : (
-            <LogOut size={20} />
-          )}
-          <span className="font-medium text-sm">
-            {userRole === "super_admin_impersonating"
-              ? "Back to Admin"
-              : "Logout"}
-          </span>
+          <LogOut size={20} />
+          <span className="font-medium text-sm">Logout</span>
         </button>
       </div>
     </div>

@@ -5,6 +5,9 @@ import { Button } from "../components/UIComponents";
 const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
+  const [baseUrl, setBaseUrl] = useState(
+    window.location.origin + window.location.pathname
+  );
 
   useEffect(() => {
     if (!window.JSZip) {
@@ -33,8 +36,9 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
     else setSelectedIds(new Set(teams.map((t) => t.id)));
   };
   const getQrUrl = (teamCode) => {
-    const baseUrl = window.location.origin + window.location.pathname;
-    return `${baseUrl}?team=${teamCode}&tenant=${currentAppId}`;
+    // Remove trailing slash if present
+    const cleanBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+    return `${cleanBase}?team=${teamCode}&tenant=${currentAppId}`;
   };
   const downloadSingle = async (team) => {
     try {
@@ -198,6 +202,30 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
             Generate and batch download QR codes.
           </p>
         </div>
+      </div>
+
+      <Card className="p-4 bg-blue-50 border-blue-100">
+        <div className="flex flex-col md:flex-row gap-4 items-end">
+          <div className="flex-1 w-full">
+            <label className="text-sm font-bold text-blue-800 mb-1 block">
+              QR Code Base URL (Important for Mobile Scanning)
+            </label>
+            <input
+              type="text"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              className="w-full px-4 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="e.g., http://192.168.1.5:5173"
+            />
+            <p className="text-xs text-blue-600 mt-1">
+              If scanning from mobile, replace "localhost" with your computer's
+              IP address (e.g., http://192.168.x.x:5173).
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex gap-2 flex-wrap">
           <Button
             variant="secondary"

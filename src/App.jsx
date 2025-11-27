@@ -21,7 +21,6 @@ import { Card, ToastContainer } from "./components/UIComponents";
 import Sidebar from "./components/Sidebar";
 
 // Pages
-import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import ParticipantsView from "./pages/ParticipantsView";
 import LoginView from "./pages/LoginView";
 import DashboardView from "./pages/DashboardView";
@@ -37,7 +36,6 @@ export default function App() {
   const [view, setView] = useState("dashboard");
   const [adminLoggedIn, setAdminLoggedIn] = useState(false);
   const [activeAppId, setActiveAppId] = useState(DEFAULT_APP_ID);
-  const [userRole, setUserRole] = useState("client");
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   const [teams, setTeams] = useState([]);
@@ -86,50 +84,28 @@ export default function App() {
 
   const handleLoginSuccess = (userData) => {
     localStorage.setItem("event_marks_session", JSON.stringify(userData));
-    if (userData.role === "super_admin") {
-      setUserRole("super_admin");
-      setAdminLoggedIn(true);
-      setView("admin_dashboard");
-    } else {
-      setUserRole("client");
-      setActiveAppId(userData.dbId);
-      setAdminLoggedIn(true);
-      setView("dashboard");
-    }
+    setActiveAppId(userData.dbId || DEFAULT_APP_ID);
+    setAdminLoggedIn(true);
+    setView("dashboard");
   };
 
   const handleLogout = () => {
+    localStorage.removeItem("event_marks_session");
     setTeams([]);
     setInvigilators([]);
     setSubmissions([]);
     setAuditLogs([]);
     setIsDataLoaded(false);
-
-    if (userRole === "super_admin_impersonating") {
-      // Restore Super Admin Session
-      const adminSession = { role: "super_admin", name: "Sathyamoorthy" };
-      localStorage.setItem("event_marks_session", JSON.stringify(adminSession));
-      
-      setUserRole("super_admin");
-      setView("admin_dashboard");
-      setActiveAppId(DEFAULT_APP_ID); // Optional: Reset to default or keep as is, but view changes to admin_dashboard
-    } else {
-      // Full Logout
-      localStorage.removeItem("event_marks_session");
-      setAdminLoggedIn(false);
-      setUserRole("client");
-      setUser(null); // Ensure user state is cleared if needed, though onAuthStateChanged handles it
-    }
+    setAdminLoggedIn(false);
+    setUser(null);
   };
 
   useEffect(() => {
     const savedSession = localStorage.getItem("event_marks_session");
     if (savedSession && !activeTeamId) {
       const session = JSON.parse(savedSession);
-      setUserRole(session.role);
-      setActiveAppId(session.dbId);
+      setActiveAppId(session.dbId || DEFAULT_APP_ID);
       setAdminLoggedIn(true);
-      if (session.role === "super_admin") setView("admin_dashboard");
     }
   }, [activeTeamId]);
 
@@ -137,7 +113,6 @@ export default function App() {
     if (!user) return;
     // If not logged in as admin AND not in scanning mode (activeTeamId), don't fetch data
     if (!adminLoggedIn && !activeTeamId) return;
-    if (userRole === "super_admin" && view === "admin_dashboard") return;
 
     setIsDataLoaded(false);
 
@@ -186,7 +161,7 @@ export default function App() {
       unsubRubric();
       unsubRanking();
     };
-  }, [user, adminLoggedIn, activeAppId, userRole, view, activeTeamId]);
+  }, [user, adminLoggedIn, activeAppId, view, activeTeamId]);
 
   const leaderboard = useMemo(() => {
     const scores = {};
@@ -231,27 +206,6 @@ export default function App() {
       })
       .sort((a, b) => b.finalScore - a.finalScore);
   }, [submissions, rankingConfig]);
-
-  if (adminLoggedIn && userRole === "super_admin" && view === "admin_dashboard")
-    return (
-      <SuperAdminDashboard
-        onLogout={handleLogout}
-        onAccessDatabase={(client) => {
-          const impersonatedSession = {
-            role: "super_admin_impersonating",
-            dbId: client.uniqueAppId,
-            name: "Sathyamoorthy",
-          };
-          localStorage.setItem(
-            "event_marks_session",
-            JSON.stringify(impersonatedSession)
-          );
-          setActiveAppId(client.uniqueAppId);
-          setUserRole("super_admin_impersonating");
-          setView("dashboard");
-        }}
-      />
-    );
 
   if (activeTeamId)
     return (
@@ -301,7 +255,6 @@ export default function App() {
         view={view}
         setView={setView}
         onLogout={handleLogout}
-        userRole={userRole}
         activeAppId={activeAppId}
       />
       <main className="flex-1 overflow-y-auto p-8 relative">

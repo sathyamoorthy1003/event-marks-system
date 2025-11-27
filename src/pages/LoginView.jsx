@@ -13,10 +13,14 @@ const LoginView = ({ onLogin, addToast }) => {
     e.preventDefault();
     setLoading(true);
     if (
-      email.toLowerCase() === "sathyamoorthyc1003@gmail.com" &&
-      password === "Prakash@1"
+      email.toLowerCase() === "admin@event.com" &&
+      password === "admin123"
     ) {
-      onLogin({ role: "super_admin", name: "Sathyamoorthy" });
+      onLogin({
+        role: "client",
+        name: "Demo Admin",
+        dbId: DEFAULT_APP_ID,
+      });
       setLoading(false);
       return;
     }
