@@ -69,6 +69,7 @@ export default function App() {
   // INITIALIZATION & SESSION RESTORATION
   useEffect(() => {
     const init = async () => {
+      console.log("App: Initializing...");
       // 1. Handle URL Params (QR Code Scan)
       const params = new URLSearchParams(window.location.search);
       const scannedTeamId = params.get("team");
@@ -80,13 +81,16 @@ export default function App() {
       let targetAppId = DEFAULT_APP_ID;
 
       if (scannedTenantId) {
+        console.log("App: Found tenant in URL", scannedTenantId);
         targetAppId = scannedTenantId;
       } else {
         const savedSession = localStorage.getItem("event_marks_session");
+        console.log("App: Checking localStorage", savedSession);
         if (savedSession) {
           try {
             const session = JSON.parse(savedSession);
             if (session.dbId) {
+              console.log("App: Restoring session for", session.dbId);
               targetAppId = session.dbId;
               setAdminLoggedIn(true); // Assume admin if session exists (simplified for now)
             }
@@ -96,21 +100,30 @@ export default function App() {
         }
       }
 
+      console.log("App: Setting activeAppId to", targetAppId);
       setActiveAppId(targetAppId);
 
       // 3. Initialize Auth
-      if (typeof __initial_auth_token !== "undefined" && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
+      try {
+        if (typeof __initial_auth_token !== "undefined" && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Auth initialization failed:", error);
+        addToast("Network Error: Could not connect to database.", "error");
+      } finally {
+        setIsSessionChecked(true); // Mark initialization as complete
       }
-      
-      setIsSessionChecked(true); // Mark initialization as complete
     };
 
     init();
 
-    const unsubscribe = onAuthStateChanged(auth, setUser);
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      console.log("App: Auth state changed", u ? "User logged in" : "No user");
+      setUser(u);
+    });
     return () => unsubscribe(); // Fix memory leak
   }, []);
 
