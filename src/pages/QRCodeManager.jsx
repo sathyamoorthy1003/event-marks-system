@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { CheckSquare, Square, Download, FileText, Printer } from "lucide-react";
-import { Button } from "../components/UIComponents";
+import { Button, Card } from "../components/UIComponents";
 
 const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
   const [selectedIds, setSelectedIds] = useState(new Set());
