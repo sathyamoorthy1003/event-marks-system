@@ -99,8 +99,6 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("event_marks_session");
-
     setTeams([]);
     setInvigilators([]);
     setSubmissions([]);
@@ -108,11 +106,19 @@ export default function App() {
     setIsDataLoaded(false);
 
     if (userRole === "super_admin_impersonating") {
+      // Restore Super Admin Session
+      const adminSession = { role: "super_admin", name: "Sathyamoorthy" };
+      localStorage.setItem("event_marks_session", JSON.stringify(adminSession));
+      
       setUserRole("super_admin");
       setView("admin_dashboard");
+      setActiveAppId(DEFAULT_APP_ID); // Optional: Reset to default or keep as is, but view changes to admin_dashboard
     } else {
+      // Full Logout
+      localStorage.removeItem("event_marks_session");
       setAdminLoggedIn(false);
       setUserRole("client");
+      setUser(null); // Ensure user state is cleared if needed, though onAuthStateChanged handles it
     }
   };
 
@@ -231,6 +237,15 @@ export default function App() {
       <SuperAdminDashboard
         onLogout={handleLogout}
         onAccessDatabase={(client) => {
+          const impersonatedSession = {
+            role: "super_admin_impersonating",
+            dbId: client.uniqueAppId,
+            name: "Sathyamoorthy",
+          };
+          localStorage.setItem(
+            "event_marks_session",
+            JSON.stringify(impersonatedSession)
+          );
           setActiveAppId(client.uniqueAppId);
           setUserRole("super_admin_impersonating");
           setView("dashboard");
