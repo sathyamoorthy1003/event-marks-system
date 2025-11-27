@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { CheckSquare, Square, FileArchive, FileType, Printer } from "lucide-react";
+import { CheckSquare, Square, Download, FileText, Printer } from "lucide-react";
 import { Button } from "../components/UIComponents";
 
 const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
@@ -243,14 +243,14 @@ const QRCodeManager = ({ teams, onSimulateScan, addToast, currentAppId }) => {
           <Button
             onClick={downloadZip}
             disabled={isProcessing || selectedIds.size === 0}
-            icon={FileArchive}
+            icon={Download}
           >
             {isProcessing ? "Processing..." : "Download ZIP"}
           </Button>
           <Button
             onClick={downloadWord}
             disabled={isProcessing || selectedIds.size === 0}
-            icon={FileType}
+            icon={FileText}
           >
             {isProcessing ? "Generating..." : "Download DOCX"}
           </Button>
