@@ -57,6 +57,15 @@ export default function App() {
     );
   };
 
+  // PERSISTENCE: Save activeAppId whenever it changes
+  useEffect(() => {
+    if (activeAppId && activeAppId !== DEFAULT_APP_ID) {
+      const session = JSON.parse(localStorage.getItem("event_marks_session") || "{}");
+      session.dbId = activeAppId;
+      localStorage.setItem("event_marks_session", JSON.stringify(session));
+    }
+  }, [activeAppId]);
+
   // INITIALIZATION & SESSION RESTORATION
   useEffect(() => {
     const init = async () => {
@@ -66,21 +75,28 @@ export default function App() {
       const scannedTenantId = params.get("tenant");
 
       if (scannedTeamId) setActiveTeamId(scannedTeamId);
-      if (scannedTenantId) setActiveAppId(scannedTenantId);
+      
+      // Priority: URL Tenant > LocalStorage Tenant > Default
+      let targetAppId = DEFAULT_APP_ID;
 
-      // 2. Restore Session if not scanning
-      if (!scannedTeamId) {
+      if (scannedTenantId) {
+        targetAppId = scannedTenantId;
+      } else {
         const savedSession = localStorage.getItem("event_marks_session");
         if (savedSession) {
           try {
             const session = JSON.parse(savedSession);
-            if (session.dbId) setActiveAppId(session.dbId);
-            setAdminLoggedIn(true);
+            if (session.dbId) {
+              targetAppId = session.dbId;
+              setAdminLoggedIn(true); // Assume admin if session exists (simplified for now)
+            }
           } catch (e) {
             console.error("Failed to parse session", e);
           }
         }
       }
+
+      setActiveAppId(targetAppId);
 
       // 3. Initialize Auth
       if (typeof __initial_auth_token !== "undefined" && __initial_auth_token) {
@@ -99,8 +115,11 @@ export default function App() {
   }, []);
 
   const handleLoginSuccess = (userData) => {
-    localStorage.setItem("event_marks_session", JSON.stringify(userData));
-    setActiveAppId(userData.dbId || DEFAULT_APP_ID);
+    // Save entire session object
+    const sessionData = { ...userData, dbId: userData.dbId || DEFAULT_APP_ID };
+    localStorage.setItem("event_marks_session", JSON.stringify(sessionData));
+    
+    setActiveAppId(sessionData.dbId);
     setAdminLoggedIn(true);
     setView("dashboard");
   };

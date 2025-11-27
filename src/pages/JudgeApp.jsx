@@ -107,11 +107,32 @@ const JudgeApp = ({
     setIsSubmitting(false);
   };
 
+  const [showTimeout, setShowTimeout] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!isDataLoaded && teams.length === 0) {
+        setShowTimeout(true);
+      }
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [isDataLoaded, teams]);
+
   if (!isDataLoaded && teams.length === 0) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-500 gap-4">
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-500 gap-4 p-6 text-center">
         <Loader2 size={48} className="animate-spin text-blue-600" />
         <p>Loading Event Data...</p>
+        {showTimeout && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 flex flex-col items-center gap-2 mt-4">
+            <p className="text-red-500 text-sm max-w-xs">
+              Taking longer than expected. Check your internet connection or try reloading.
+            </p>
+            <Button onClick={() => window.location.reload()}>
+              Reload Page
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
